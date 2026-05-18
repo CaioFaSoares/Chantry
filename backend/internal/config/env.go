@@ -12,6 +12,9 @@ type Config struct {
 	DiscordAppID     string
 	DiscordPublicKey string
 	DiscordBotToken  string
+	PocketBaseURL    string
+	PBAdminEmail     string
+	PBAdminPassword  string
 }
 
 // LoadConfig loads variables from a physical .env file if available,
@@ -30,9 +33,30 @@ func LoadConfig() (*Config, error) {
 		return nil, errors.New("DISCORD_BOT_TOKEN is missing or empty in the environment configuration")
 	}
 
+	pocketBaseURL := os.Getenv("POCKETBASE_URL")
+	if pocketBaseURL == "" {
+		pocketBaseURL = "http://pocketbase:8090"
+	}
+	if len(pocketBaseURL) > 0 && pocketBaseURL[len(pocketBaseURL)-1] != '/' {
+		pocketBaseURL += "/"
+	}
+
+	pbAdminEmail := os.Getenv("PB_ADMIN_EMAIL")
+	pbAdminPassword := os.Getenv("PB_ADMIN_PASSWORD")
+
+	if pbAdminEmail == "" {
+		return nil, errors.New("PB_ADMIN_EMAIL is missing or empty in the environment configuration")
+	}
+	if pbAdminPassword == "" {
+		return nil, errors.New("PB_ADMIN_PASSWORD is missing or empty in the environment configuration")
+	}
+
 	return &Config{
 		DiscordAppID:     discordAppID,
 		DiscordPublicKey: discordPublicKey,
 		DiscordBotToken:  discordBotToken,
+		PocketBaseURL:    pocketBaseURL,
+		PBAdminEmail:     pbAdminEmail,
+		PBAdminPassword:  pbAdminPassword,
 	}, nil
 }

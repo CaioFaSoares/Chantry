@@ -34,13 +34,19 @@ services:
     restart: unless-stopped
 
   pocketbase:
-    image: ghcr.io/muchobien/pocketbase:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: chantry_pocketbase
     ports:
       - "12090:8090"
     volumes:
       - ./pb_data:/pb_data
+    environment:
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
     restart: unless-stopped
+    command: ["./main", "serve", "--http=0.0.0.0:8090", "--dir=/pb_data"]
 
   go-server:
     build:
@@ -52,6 +58,8 @@ services:
     environment:
       - PORT=12000
       - POCKETBASE_URL=http://pocketbase:8090
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
       - DISCORD_APP_ID=${DISCORD_APP_ID}
       - DISCORD_PUBLIC_KEY=${DISCORD_PUBLIC_KEY}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
