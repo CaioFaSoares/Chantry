@@ -3,9 +3,12 @@ package main
 import (
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"chantry/backend/internal/config"
+	"chantry/backend/internal/cron"
 	"chantry/backend/internal/discord"
 	"chantry/backend/internal/handlers"
 	_ "chantry/backend/internal/migrations" // Automatically registers Go migrations
@@ -75,6 +78,17 @@ func runFiberApp() {
 	provisionUsecase := usecases.NewProvisionUsecase(discordService, pbRepo)
 	provisionHandler := handlers.NewProvisionHandler(provisionUsecase)
 
+	configHandler := handlers.NewConfigHandler(pbRepo)
+	reportHandler := handlers.NewReportHandler(pbRepo)
+
+	testUsecase := usecases.NewTestUsecase(pbRepo, discordService)
+	testHandler := handlers.NewTestHandler(testUsecase, pbRepo)
+
+	// Initialize AttendanceUsecase and register Interaction handlers for Gateway
+	attendanceUsecase := usecases.NewAttendanceUsecase(pbRepo)
+	discord.RegisterInteractionHandlers(discordService.Session, attendanceUsecase)
+	log.Println("✅ Handlers de Interação do Discord registrados")
+
 	// Initialize Fiber App with dynamic configuration
 	app := fiber.New(fiber.Config{
 		AppName: "Chantry Go Daemon v0.1.0",
@@ -91,10 +105,16 @@ func runFiberApp() {
 
 	// Healthcheck Route
 	app.Get("/api/health", func(c *fiber.Ctx) error {
+		loc, err := time.LoadLocation("America/Sao_Paulo")
+		now := time.Now()
+		if err == nil {
+			now = now.In(loc)
+		}
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"status":    "ok",
 			"service":   "chantry-go-daemon",
-			"timestamp": time.Now().Format(time.RFC3339),
+			"timestamp": now.Format(time.RFC3339),
+			"timezone":  "America/Sao_Paulo",
 		})
 	})
 
@@ -112,6 +132,23 @@ func runFiberApp() {
 
 	// Provisioning Route (1-on-1 Private Channels Batch)
 	api.Post("/provision/guilds/:guildId/channels", provisionHandler.HandleProvisionChannels)
+	api.Post("/provision/guilds/:guildId/heal", provisionHandler.HandleHealChannels)
+
+	// Configuration Routes (Schedules & Shifts)
+	api.Get("/config/guilds/:guildId/roles", configHandler.HandleGetGuildRolesConfig)
+	api.Patch("/config/roles/:roleId", configHandler.HandleUpdateRoleConfig)
+
+	// Analytical Report Routes (Daily Attendance Dashboard)
+	api.Get("/reports/guilds/:guildId/attendances", reportHandler.HandleGetAttendances)
+
+	// Sandbox Dry Run Test Routes
+	api.Post("/test/attendance/trigger", testHandler.HandleTestAttendanceTrigger)
+	api.Get("/test/guilds/:guildId/managers", testHandler.HandleGetManagers)
+
+	// Start dynamic cron background scheduler
+	cron.StartDynamicCron(pbRepo, discordService)
+	// Start background clock-out check ticker
+	cron.StartClockOutTicker(pbRepo, discordService)
 
 	// Get port from environment or fallback to 12000
 	port := os.Getenv("PORT")
@@ -119,9 +156,32 @@ func runFiberApp() {
 		port = "12000"
 	}
 
-	log.Printf("🚀 Fiber app listening on port %s...", port)
-	// Start server on the designated safe port
-	if err := app.Listen(":" + port); err != nil {
-		panic(err)
+	// Start Fiber in a non-blocking goroutine
+	go func() {
+		log.Printf("🚀 Fiber app listening on port %s...", port)
+		if err := app.Listen(":" + port); err != nil {
+			log.Printf("⚠️ Fiber server listening stopped: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	<-quit
+
+	log.Println("⚡ Gracefully shutting down daemon...")
+
+	// Close Discord Gateway connection
+	if err := discordService.Close(); err != nil {
+		log.Printf("⚠️ Warning: erro ao fechar sessão do Discord: %v", err)
+	} else {
+		log.Println("✅ Conexão WebSocket do Discord fechada com sucesso")
+	}
+
+	// Shutdown Fiber app
+	if err := app.Shutdown(); err != nil {
+		log.Printf("⚠️ Warning: erro ao desligar Fiber: %v", err)
+	} else {
+		log.Println("✅ Servidor Fiber finalizado com sucesso")
 	}
 }

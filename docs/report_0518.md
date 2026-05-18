@@ -1,12 +1,12 @@
 # 🌌 Relatório de Engenharia e Status: Suíte Chantry (18/05/2026)
 
-Este documento sumariza as evoluções arquiteturais, modelagem de dados, motor de provisionamento e o painel de controle frontend realizados no ecossistema Chantry.
+Este documento sumariza as evoluções arquiteturais, modelagem de dados, motor de provisionamento, painel de controle e mecanismos de disaster recovery realizados no ecossistema Chantry.
 
 ---
 
 ## 🏛️ Visão Geral da Arquitetura Híbrida
 
-Hoje realizamos a consolidação de uma **arquitetura de imagem única** no backend, a transição para um **PocketBase embarcado (embedded)** em Go, a implementação do **Motor de Provisionamento em Lote de Canais Privados** e a **remoção completa do n8n da stack**, simplificando a infraestrutura da aplicação.
+Hoje realizamos a consolidação de uma **arquitetura de imagem única** no backend, a transição para um **PocketBase embarcado (embedded)** em Go, a implementação do **Motor de Provisionamento em Lote de Canais Privados**, o **Motor Cron de Agendamento Dinâmico** e a **remoção completa do n8n da stack**, simplificando a infraestrutura da aplicação.
 
 O binário `./main` em Go atua em duas frentes independentes com base nos argumentos de execução:
 1. **PocketBase Server (`./main serve`)**: Executa o banco de dados SQLite local embarcado, aplica migrações automáticas de esquema e expõe as portas de dados HTTP na porta `12090` (ou `8090` interno).
@@ -35,7 +35,7 @@ graph TD
 A persistência do banco de dados local foi modernizada com alta normalização de dados para evitar *anti-patterns* de coleções embutidas, estruturando chaves estrangeiras e regras estritas de segurança.
 
 ### Coleções Estruturadas
-O esquema foi estruturado no arquivo local [pb_schema.json](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/pb_schema.json) contemplando:
+O esquema foi estruturado no arquivo local [pb_schema.json](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/migrations/pb_schema.json) contemplando:
 *   **`guilds`**: Monitoramento dos servidores (Discord ID e Status de ativação).
 *   **`roles`**: Cargos de turmas vinculados a um servidor específico.
 *   **`students`**: Snapshot de alunos sincronizados do Discord, associando-os com `roles`, `guilds`, status escolar e de canais dedicados.
@@ -82,22 +82,37 @@ Concluímos o desenvolvimento completo dos fluxos de provisionamento automático
 *   **Transacionalidade e Durabilidade:** Salva o `channel_id` individualmente no PocketBase logo após a criação no Discord, prevenindo perda de estado em caso de queda de rede ou reinicialização.
 *   **Roteamento Fiber:** Endpoint mapeado em `POST /api/provision/guilds/:guildId/channels`.
 
-### 🖥️ PRD 3.4 - Painel do Streamlit: Provisionamento e Infraestrutura
-*   **Nova Página (`3_infra_provisioning.py`):** Criamos a interface com Outfit font do Google Fonts, cards glassmorphic e cabeçalhos gradientes de alta fidelidade visual.
-*   **Dropdowns Reativos:** Selectbox de Servidor e Cargo ativos integrados à API.
-*   **Estratégia de Categoria Pai:** Escolha entre usar categoria existente ou criar nova na hora. A criação de categoria mapeia o status de resposta `201 Created`, armazena o ID no `st.session_state` e usa `st.rerun()` para auto-selecionar o novo canal após o recarregamento.
-*   **Status Logger Progressivo:** Monitora visualmente a requisição em lote longa utilizando o widget `st.status` com timeout estendido de `180` segundos.
-*   **Métricas do Lote:** Plota cards interativos de total de alunos, canais criados, já provisionados e possíveis erros.
-
 ---
 
-## 🧹 Evolução da Stack: Remoção do n8n
+## ⏰ Épico 4: Schema Híbrido, Agendamento e Disaster Recovery
 
-Para otimizar o consumo de recursos e focar o ecossistema nas soluções de desenvolvimento nativas da Suíte Chantry (Streamlit + PocketBase + Go Daemon), removemos completamente o n8n do fluxo:
-*   **Exclusão de Arquivos:** Deletamos o arquivo de guias `1_n8n_guide.py`.
-*   **Refatoração do app.py:** Reconfiguramos a home do Streamlit de 4 colunas para uma grade limpa de 3 colunas (Streamlit Dashboard, PocketBase Backend, Go Backend Daemon).
-*   **Exclusão do Sandbox:** Removemos por completo a seção Sandbox de webhooks de teste que realizava envios simulados para o n8n.
-*   **Remoção Concluída:** A varredura de termos pelo diretório aponta que o frontend está 100% livre de referências ao n8n.
+Expandimos o motor para gerenciar rotinas inteligentes de horários e resolver incidentes de perda de banco de dados sem quebrar a infraestrutura física já instalada no Discord.
+
+### 📊 PRD 4.1 & 4.3.a - Evolução do Schema de Horários & Flags de Ativação
+*   **Novas Colunas em `roles`**: Evoluímos a tabela de cargos para carregar suas próprias regras operacionais de presença. O arquivo `pb_schema.json` agora contempla:
+    *   `shift` (Turno selecionado: Manhã/Tarde/Noite).
+    *   `check_in_time` (Horário de disparo da mensagem de bom dia).
+    *   `checkout_cooldown` (Janela/tolerância de saída em horas).
+    *   `is_monitored` (Diferencia visual e logicamente squads/turmas ativas de cargos de acesso comuns no Discord).
+    *   `is_active` (Permite que o administrador ative ou pause temporariamente os envios automáticos sem perder os horários).
+*   **Painel Administrativo (`4_schedule_config.py`)**: Dividido em abas funcionais:
+    1.  *⏰ Horários de Ponto*: Edição direta dos parâmetros e ativação/pausa dinâmica via toggles em cards interativos.
+    2.  *⚙️ Triagem de Turmas*: Permite associar cargos gerais a turmas de forma seletiva, disparando requisições `PATCH` apenas para registros que de fato sofreram alteração, garantindo performance e integridade de estado.
+
+### 🛠️ PRD 4.3.b - Auto-Healing / Disaster Recovery
+Caso a base de dados do PocketBase seja deletada ou resetada, o Chantry consegue restaurar de forma imediata o ecossistema reimportando os alunos e aplicando nosso algoritmo exclusivo de recuperação de canais órfãos.
+*   **Algoritmo de Correlação Bidirecional**:
+    1.  **Mecanismo por Discord ID (Estratégia Primária - Ultra-Precisa)**: O motor de auto-healing escaneará cada canal sob a categoria selecionada. Ele analisa os `PermissionOverwrites` buscando por uma permissão de membro cujo ID corresponda a um aluno cadastrado no PocketBase. Por utilizar o ID Snowflake único do Discord (que nunca muda), esta estratégia é totalmente imune a trocas de nicknames e usernames dos alunos.
+    2.  **Fallback por Username (Estratégia Secundária)**: Caso as permissões tenham sido alteradas, o algoritmo extrai o username do padrão de nomenclatura do canal (`1-on-1-<username>`) e tenta associá-lo ao aluno correspondente.
+*   **Interface no Streamlit (`3_infra_provisioning.py`)**: Inclui uma zona segura com `st.expander` onde o administrador escolhe a categoria com os canais órfãos e dispara a recuperação transacional do banco em segundos, exibindo os resultados consolidados das métricas de cura.
+
+### ⏰ PRD 4.4 - Motor de Saída (Clock-out Timer)
+Desenvolvemos uma rotina assíncrona desacoplada em Go (`StartClockOutTicker`) que varre o banco a cada 1 minuto localizando registros com status `pending_checkout`. Se o intervalo desde a hora de entrada (`clock_in`) acrescido do cooldown configurado ultrapassar o horário atual, um botão vermelho interativo (`btn_clock_out`) é despachado no canal privado do respectivo aluno e a flag `checkout_prompt_sent` é atualizada para evitar spam.
+
+### 📊 PRD 4.5 - Frontend: Dashboard de Ponto (Visão Gerencial)
+A interface administrativa possui agora um painel gerencial consolidado (`5_attendance_dashboard.py`).
+*   **Agregador no Backend**: Nova rota `GET /api/reports/guilds/:guildId/attendances` que extrai as presenças diárias, mapeia nicknames e usernames de forma eficiente e expõe um payload DTO unificado.
+*   **Layout Streamlit**: Tela com visualização premium (Outfit font, glassmorphism), indicadores dinâmicos em cards de métricas (Presenças completas, em andamento, atrasados e faltas) e tabela Pandas contendo emojis descritivos estruturada de forma responsiva.
 
 ---
 
@@ -109,5 +124,5 @@ Realizamos os testes de compilação estática em ambas as linguagens e a integr
     *   **Comando:** `go build -o /dev/null ./cmd/api/main.go` (no diretório `backend`)
     *   **Resultado:** Compilação bem-sucedida, sem avisos de tipagem estática ou erros de injeção (`Exit code: 0`).
 2.  **Frontend Streamlit (`python3 -m py_compile`):**
-    *   **Comando:** `python3 -m py_compile streamlit/app.py` e `python3 -m py_compile streamlit/pages/3_infra_provisioning.py`
+    *   **Comando:** `python3 -m py_compile streamlit/app.py` e `python3 -m py_compile streamlit/pages/5_attendance_dashboard.py`
     *   **Resultado:** Sintaxe Python e importações validadas sem erros (`Exit code: 0`).

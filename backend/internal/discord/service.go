@@ -273,3 +273,55 @@ func (s *DiscordService) CreatePrivateChannel(
 		ParentID: ch.ParentID,
 	}, nil
 }
+
+// SendAttendanceButtons sends the interactive Check-In / Check-Out button prompt to a specific Discord channel.
+func (s *DiscordService) SendAttendanceButtons(channelID string) error {
+	_, err := s.Session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+		Content: "☀️ **Bom dia!** Está na hora de registrar a sua presença hoje.\nUse os botões abaixo para bater o seu ponto de entrada e de saída:",
+		Components: []discordgo.MessageComponent{
+			discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					discordgo.Button{
+						Label:    "Entrada (Check-In)",
+						Style:    discordgo.SuccessButton,
+						CustomID: "btn_clock_in",
+						Emoji: &discordgo.ComponentEmoji{
+							Name: "🟢",
+						},
+					},
+					discordgo.Button{
+						Label:    "Saída (Check-Out)",
+						Style:    discordgo.DangerButton,
+						CustomID: "btn_clock_out",
+						Emoji: &discordgo.ComponentEmoji{
+							Name: "🔴",
+						},
+					},
+				},
+			},
+		},
+	})
+	return err
+}
+
+// SendCheckoutPrompt sends the interactive Clock-Out button prompt to a specific Discord channel.
+func (s *DiscordService) SendCheckoutPrompt(channelID string) error {
+	_, err := s.Session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+		Content: "⏰ **O teu turno terminou!**\nPor favor, clica no botão abaixo para registar a saída:",
+		Components: []discordgo.MessageComponent{
+			discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					discordgo.Button{
+						Label:    "Saída (Check-Out)",
+						Style:    discordgo.DangerButton,
+						CustomID: "btn_clock_out",
+						Emoji: &discordgo.ComponentEmoji{
+							Name: "🔴",
+						},
+					},
+				},
+			},
+		},
+	})
+	return err
+}

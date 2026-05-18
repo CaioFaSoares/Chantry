@@ -226,3 +226,256 @@ func (r *Repository) FindStudentsPendingProvision(guildID string, roleID string)
 
 	return students, nil
 }
+
+// FindAttendanceByStudentAndDate searches for an attendance record for a specific student and date.
+// The dateStr should be in "YYYY-MM-DD" format.
+// If found, it populates the dest pointer and returns true, nil.
+// If not found, it returns false, nil.
+func (r *Repository) FindAttendanceByStudentAndDate(studentID string, dateStr string, dest *AttendanceRecord) (bool, error) {
+	filter := fmt.Sprintf("student_id='%s' && date>='%s 00:00:00' && date<='%s 23:59:59'", studentID, dateStr, dateStr)
+	endpoint := fmt.Sprintf("api/collections/attendances/records?filter=%s&limit=1", url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to query pocketbase for attendance: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return false, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	if listResp.TotalItems == 0 {
+		return false, nil
+	}
+
+	var items []json.RawMessage
+	if err := json.Unmarshal(listResp.Items, &items); err != nil {
+		return false, fmt.Errorf("failed to parse items array: %w", err)
+	}
+
+	if len(items) == 0 {
+		return false, nil
+	}
+
+	if err := json.Unmarshal(items[0], dest); err != nil {
+		return false, fmt.Errorf("failed to unmarshal attendance record: %w", err)
+	}
+
+	return true, nil
+}
+
+// FindRolesByGuild searches for all roles associated with the target Guild ID (PocketBase Record ID) in PocketBase.
+func (r *Repository) FindRolesByGuild(guildID string) ([]RoleRecord, error) {
+	filter := fmt.Sprintf("guild_id='%s'", guildID)
+	endpoint := fmt.Sprintf("api/collections/roles/records?filter=%s&limit=200", url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for guild roles: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var roles []RoleRecord
+	if err := json.Unmarshal(listResp.Items, &roles); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal roles array: %w", err)
+	}
+
+	return roles, nil
+}
+
+// FindRolesByCheckInTime searches for active, monitored roles configured with the exact check-in time HH:MM (ex: "08:00").
+func (r *Repository) FindRolesByCheckInTime(checkInTime string) ([]RoleRecord, error) {
+	filter := fmt.Sprintf("check_in_time='%s' && is_monitored=true && is_active=true", checkInTime)
+	endpoint := fmt.Sprintf("api/collections/roles/records?filter=%s&limit=200", url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for scheduled roles: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var roles []RoleRecord
+	if err := json.Unmarshal(listResp.Items, &roles); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal roles array: %w", err)
+	}
+
+	return roles, nil
+}
+
+// FindActiveStudentsByRole searches for students linked to a specific guild and role with status = 'active'.
+func (r *Repository) FindActiveStudentsByRole(guildID string, roleID string) ([]StudentRecord, error) {
+	filter := fmt.Sprintf("guild_id='%s' && role_id='%s' && status='active'", guildID, roleID)
+	endpoint := fmt.Sprintf("api/collections/students/records?filter=%s&limit=200", url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for active students: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var students []StudentRecord
+	if err := json.Unmarshal(listResp.Items, &students); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal students array: %w", err)
+	}
+
+	return students, nil
+}
+
+// FindStudentsByGuild fetches all student records in PocketBase associated with a specific Guild ID.
+func (r *Repository) FindStudentsByGuild(guildID string) ([]StudentRecord, error) {
+	filter := fmt.Sprintf("guild_id='%s'", guildID)
+	endpoint := fmt.Sprintf("api/collections/students/records?filter=%s&limit=500", url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for guild students: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var students []StudentRecord
+	if err := json.Unmarshal(listResp.Items, &students); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal students array: %w", err)
+	}
+
+	return students, nil
+}
+
+// FindByID retrieves a single record from a collection by its PocketBase internal 15-character ID.
+func (r *Repository) FindByID(collection string, pbID string, dest interface{}) (bool, error) {
+	endpoint := fmt.Sprintf("api/collections/%s/records/%s", collection, pbID)
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to retrieve record by id: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("pocketbase retrieve record failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+		return false, fmt.Errorf("failed to decode retrieved record: %w", err)
+	}
+
+	return true, nil
+}
+
+// FindPendingCheckouts searches for all attendance records that have a status of 'pending_checkout'
+// and where the checkout prompt has not been sent yet (checkout_prompt_sent = false).
+// It expands 'student_id.role_id' to load the student channel ID and the role's cooldown value.
+func (r *Repository) FindPendingCheckouts() ([]AttendanceRecord, error) {
+	filter := "status='pending_checkout' && checkout_prompt_sent=false"
+	expand := "student_id.role_id"
+	endpoint := fmt.Sprintf("api/collections/attendances/records?filter=%s&expand=%s&limit=500", url.QueryEscape(filter), url.QueryEscape(expand))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for pending checkouts: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var attendances []AttendanceRecord
+	if err := json.Unmarshal(listResp.Items, &attendances); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal attendances array: %w", err)
+	}
+
+	return attendances, nil
+}
+
+// GetAttendancesByDateAndRole queries the PocketBase collections for all attendances in a specific guild,
+// for a specific role and date range. It expands the 'student_id' relation to resolve student usernames and nicknames.
+func (r *Repository) GetAttendancesByDateAndRole(guildID, roleID, targetDate string) ([]AttendanceRecord, error) {
+	filter := fmt.Sprintf("student_id.guild_id='%s' && student_id.role_id='%s' && date>='%s 00:00:00' && date<='%s 23:59:59'", guildID, roleID, targetDate, targetDate)
+	expand := "student_id"
+	endpoint := fmt.Sprintf("api/collections/attendances/records?filter=%s&expand=%s&limit=500", url.QueryEscape(filter), url.QueryEscape(expand))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for daily attendances: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase daily attendances query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var attendances []AttendanceRecord
+	if err := json.Unmarshal(listResp.Items, &attendances); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal attendances array: %w", err)
+	}
+
+	return attendances, nil
+}

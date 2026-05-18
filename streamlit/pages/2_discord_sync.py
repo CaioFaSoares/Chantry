@@ -1,8 +1,6 @@
 import streamlit as st
-import requests
 import pandas as pd
-import socket
-import json
+from utils.api_client import fetch_guilds, fetch_roles, fetch_members, sync_advanced_to_db
 
 # Page config
 st.set_page_config(
@@ -64,70 +62,6 @@ html, body, [class*="css"], .stMarkdown, .stButton button {
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# Helper function to auto-resolve Backend URL depending on runtime environment
-def get_backend_url():
-    try:
-        # Check if the internal Docker compose hostname "go-server" is resolvable
-        socket.gethostbyname("go-server")
-        return "http://go-server:12000/api"
-    except socket.gaierror:
-        # Fallback to local host when running dashboard outside container
-        return "http://localhost:12000/api"
-
-# Fetching list of authorized servers (Guilds) from Go API
-def fetch_guilds(base_url):
-    try:
-        response = requests.get(f"{base_url}/discord/guilds", timeout=5.0)
-        if response.status_code == 200:
-            return response.json()
-        return []
-    except requests.exceptions.RequestException:
-        return None
-
-# Fetching list of roles in specific server (Guild) from Go API
-def fetch_roles(base_url, guild_id):
-    try:
-        response = requests.get(f"{base_url}/discord/guilds/{guild_id}/roles", timeout=5.0)
-        if response.status_code == 200:
-            return response.json()
-        return []
-    except requests.exceptions.RequestException:
-        return None
-
-# Fetching paginated list of members filtered by cargo roleID from Go API
-def fetch_members(base_url, guild_id, role_id):
-    try:
-        response = requests.get(
-            f"{base_url}/discord/guilds/{guild_id}/members",
-            params={"roleId": role_id},
-            timeout=10.0
-        )
-        if response.status_code == 200:
-            return response.json()
-        return []
-    except requests.exceptions.RequestException:
-        return None
-
-# Persists fetched members into PocketBase using the Go API (Advanced Multi-role & Manager Sync)
-def sync_advanced_to_db(base_url, guild_id, payload):
-    try:
-        url = f"{base_url}/sync/guilds/{guild_id}/advanced"
-        response = requests.post(url, json=payload, timeout=30.0)
-        if response.status_code in [200, 201]:
-            return {"success": True, "data": response.json()}
-        else:
-            try:
-                err_msg = response.json().get("error", "Erro interno no servidor")
-            except Exception:
-                err_msg = response.text
-            return {"success": False, "error": f"Erro do Servidor ({response.status_code}): {err_msg}"}
-    except requests.exceptions.Timeout:
-        return {"success": False, "error": "A requisição ao Go Daemon expirou (Timeout)."}
-    except requests.exceptions.ConnectionError:
-        return {"success": False, "error": "Não foi possível conectar ao Go Daemon. Verifique se o backend está ativo."}
-    except Exception as e:
-        return {"success": False, "error": f"Falha inesperada: {str(e)}"}
-
 # Sidebar image and navigation branding
 st.sidebar.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80", width=True)
 st.sidebar.markdown("<h2 style='text-align: center;'>Chantry Suite</h2>", unsafe_allow_html=True)
@@ -146,10 +80,11 @@ if "prev_guild_id" not in st.session_state:
     st.session_state.prev_guild_id = None
 if "prev_role_id" not in st.session_state:
     st.session_state.prev_role_id = None
+if "selected_guild_id" not in st.session_state:
+    st.session_state.selected_guild_id = None
 
-# Resolve server URL and perform initial fetch
-base_url = get_backend_url()
-guilds = fetch_guilds(base_url)
+# Perform initial fetch from central client
+guilds = fetch_guilds()
 
 if guilds is None:
     st.error(
@@ -168,10 +103,16 @@ else:
     
     col_input1, col_input2 = st.columns(2)
     
+    # Preserve selected guild in session state
+    default_index = 0
+    if st.session_state.selected_guild_id and any(g["id"] == st.session_state.selected_guild_id for g in guilds):
+        default_index = next(i for i, g in enumerate(guilds) if g["id"] == st.session_state.selected_guild_id)
+
     with col_input1:
         selected_guild = st.selectbox(
             "1. Selecione o Servidor (Guild)",
             options=guilds,
+            index=default_index,
             format_func=lambda g: g["name"],
             key="selected_guild_dropdown"
         )
@@ -179,6 +120,7 @@ else:
     # Cascade reactivity: retrieve roles only if a server is selected
     if selected_guild:
         guild_id = selected_guild["id"]
+        st.session_state.selected_guild_id = guild_id
         
         # Cascade state reset on guild switch
         if st.session_state.prev_guild_id != guild_id:
@@ -186,7 +128,7 @@ else:
             st.session_state.fetched_members = None
             st.session_state.sync_metrics = None
             
-        roles = fetch_roles(base_url, guild_id)
+        roles = fetch_roles(guild_id)
         
         with col_input2:
             if roles is None:
@@ -260,7 +202,7 @@ else:
             
             if trigger_search:
                 with st.spinner("Buscando e filtrando membros da API do Discord (processando paginação)..."):
-                    members = fetch_members(base_url, guild_id, role_id)
+                    members = fetch_members(guild_id=guild_id, role_id=role_id)
                 
                 if members is None:
                     st.error("❌ Falha crítica ao buscar membros no Discord. Verifique os privilégios do Bot no servidor.")
@@ -332,13 +274,13 @@ else:
                     }
                     
                     with st.spinner("Persistindo dados no PocketBase (Advanced Upsert)..."):
-                        result = sync_advanced_to_db(base_url, guild_id, payload)
+                        result_data = sync_advanced_to_db(guild_id=guild_id, payload=payload)
                     
-                    if result["success"]:
-                        st.session_state.sync_metrics = result["data"]["metrics"]
+                    if result_data:
+                        st.session_state.sync_metrics = result_data.get("metrics")
                         st.success("🎉 Sincronização avançada concluída com sucesso!")
                     else:
-                        st.error(f"❌ **Falha na Persistência:** {result['error']}")
+                        st.error("❌ **Falha na Persistência:** Não foi possível sincronizar com o PocketBase.")
                         st.session_state.sync_metrics = None
                 
                 # Render dual metrics dashboard if present

@@ -3,10 +3,13 @@ package usecases
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"chantry/backend/internal/discord"
 	"chantry/backend/internal/pocketbase"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 // ProvisionMetrics holds execution metrics for the batch provisioning run.
@@ -128,5 +131,135 @@ func (u *ProvisionUsecase) BatchCreatePrivateChannels(guildDiscordID, categoryDi
 	}
 
 	log.Printf("🏁 [PROVISION] Batch complete. Metrics: %+v", metrics)
+	return metrics, nil
+}
+
+// HealMetrics holds recovery metrics for the Disaster Recovery (Auto-Healing) batch run.
+type HealMetrics struct {
+	ChannelsScanned      int `json:"channels_scanned"`
+	SuccessfullyMapped   int `json:"successfully_mapped"`
+	UnmappedChannels     int `json:"unmapped_channels"`
+	StudentsStillPending int `json:"students_still_pending"`
+}
+
+// HealChannelsByCategory scans all text channels under a Discord category, matches them against
+// students' usernames in PocketBase, and updates the missing channel_id fields.
+func (u *ProvisionUsecase) HealChannelsByCategory(guildDiscordID string, categoryDiscordID string) (HealMetrics, error) {
+	metrics := HealMetrics{}
+
+	// 1. Resolve PocketBase Guild ID
+	var guildRecord pocketbase.GuildRecord
+	found, err := u.PBRepository.FindFirstByDiscordID("guilds", guildDiscordID, &guildRecord)
+	if err != nil {
+		return metrics, fmt.Errorf("failed to query guild in database: %w", err)
+	}
+	if !found {
+		return metrics, fmt.Errorf("guild %s not found in database, please sync first", guildDiscordID)
+	}
+
+	// 2. Fetch all channels in the Guild from Discord API
+	discordChannels, err := u.DiscordService.Session.GuildChannels(guildDiscordID)
+	if err != nil {
+		return metrics, fmt.Errorf("failed to fetch channels from Discord API: %w", err)
+	}
+
+	// 3. Filter channels physically belonging to the target Category and that are text channels
+	var categoryChannels []*discordgo.Channel
+	for _, ch := range discordChannels {
+		if ch.ParentID == categoryDiscordID && ch.Type == discordgo.ChannelTypeGuildText {
+			categoryChannels = append(categoryChannels, ch)
+		}
+	}
+	metrics.ChannelsScanned = len(categoryChannels)
+	log.Printf("🛠️ [HEAL] Found %d text channels under Category %s in Discord", metrics.ChannelsScanned, categoryDiscordID)
+
+	// 4. Fetch all active/existing students for this guild from PocketBase
+	students, err := u.PBRepository.FindStudentsByGuild(guildRecord.ID)
+	if err != nil {
+		return metrics, fmt.Errorf("failed to fetch students for guild %s: %w", guildRecord.ID, err)
+	}
+
+	// 5. Build O(1) maps of students indexed by their Discord ID and lowercase username
+	studentByDiscordID := make(map[string]*pocketbase.StudentRecord)
+	studentByUsername := make(map[string]*pocketbase.StudentRecord)
+	for i := range students {
+		if students[i].DiscordID != "" {
+			studentByDiscordID[students[i].DiscordID] = &students[i]
+		}
+		uName := strings.ToLower(students[i].Username)
+		if uName != "" {
+			studentByUsername[uName] = &students[i]
+		}
+	}
+
+	// 6. Match and update missing channel IDs
+	for _, ch := range categoryChannels {
+		chName := strings.ToLower(ch.Name)
+
+		var student *pocketbase.StudentRecord
+		foundByOverwrite := false
+
+		// A. First Strategy: Check Permission Overwrites for Member matching Student's Discord ID
+		for _, ow := range ch.PermissionOverwrites {
+			if ow.Type == discordgo.PermissionOverwriteTypeMember {
+				if s, exists := studentByDiscordID[ow.ID]; exists {
+					student = s
+					foundByOverwrite = true
+					log.Printf("🎯 [HEAL] Matched channel %s (%s) to student %s (%s) via Discord ID permission overwrite!", ch.Name, ch.ID, s.Nickname, s.ID)
+					break
+				}
+			}
+		}
+
+		// B. Second Strategy (Fallback): If not found by permission overwrite, match by name prefix
+		if !foundByOverwrite {
+			if strings.HasPrefix(chName, "1-on-1-") {
+				targetUsername := strings.TrimPrefix(chName, "1-on-1-")
+				if s, exists := studentByUsername[targetUsername]; exists {
+					student = s
+					log.Printf("ℹ️ [HEAL] Matched channel %s (%s) to student %s (%s) via Name Fallback", ch.Name, ch.ID, s.Nickname, s.ID)
+				}
+			}
+		}
+
+		if student == nil {
+			log.Printf("⚠️ [HEAL] Warning: Discord channel %s (%s) has no matching student (by permission or username fallback)", ch.Name, ch.ID)
+			metrics.UnmappedChannels++
+			continue
+		}
+
+		// If student has no channel_id, restore/heal it!
+		if student.ChannelID == "" {
+			log.Printf("🔗 [HEAL] Healing: Mapping Discord channel %s (%s) to student %s (%s)", ch.Name, ch.ID, student.Nickname, student.ID)
+			
+			updateData := map[string]interface{}{
+				"channel_id": ch.ID,
+			}
+			var updatedStudent pocketbase.StudentRecord
+			err = u.PBRepository.UpdateRecord("students", student.ID, updateData, &updatedStudent)
+			if err != nil {
+				log.Printf("❌ [HEAL] Error updating student %s in PocketBase: %v", student.Nickname, err)
+				// Don't interrupt the whole process for one record failure
+				continue
+			}
+
+			// Update local map state so we don't count it as pending
+			student.ChannelID = ch.ID
+			metrics.SuccessfullyMapped++
+		} else if student.ChannelID != ch.ID {
+			log.Printf("ℹ️ [HEAL] Student %s already has channel %s in database. Skipping override.", student.Nickname, student.ChannelID)
+		} else {
+			log.Printf("ℹ️ [HEAL] Channel %s is already correctly mapped in PocketBase for %s.", ch.Name, student.Nickname)
+		}
+	}
+
+	// 7. Count how many students are still pending a channel association
+	for _, student := range students {
+		if student.ChannelID == "" {
+			metrics.StudentsStillPending++
+		}
+	}
+
+	log.Printf("🏁 [HEAL] Auto-Healing run completed. Metrics: %+v", metrics)
 	return metrics, nil
 }

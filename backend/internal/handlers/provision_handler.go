@@ -65,3 +65,44 @@ func (h *ProvisionHandler) HandleProvisionChannels(c *fiber.Ctx) error {
 		"metrics": metrics,
 	})
 }
+
+type HealChannelsRequest struct {
+	CategoryID string `json:"category_id"`
+}
+
+// HandleHealChannels parses path params and body, invokes the Usecase to heal student channel mapping, and returns HealMetrics.
+func (h *ProvisionHandler) HandleHealChannels(c *fiber.Ctx) error {
+	guildID := c.Params("guildId")
+	if guildID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "The guildId path parameter is required in the route",
+		})
+	}
+
+	var req HealChannelsRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid or malformed JSON request body",
+		})
+	}
+
+	if req.CategoryID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "The category_id field is required in the JSON body",
+		})
+	}
+
+	log.Printf("[PROVISION-API] Triggered channel Auto-Healing for Guild: %s, Category: %s", guildID, req.CategoryID)
+	metrics, err := h.provisionUsecase.HealChannelsByCategory(guildID, req.CategoryID)
+	if err != nil {
+		log.Printf("❌ ERROR [HandleHealChannels] for Guild ID %s: %v", guildID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Processo de auto-healing concluído",
+		"metrics": metrics,
+	})
+}

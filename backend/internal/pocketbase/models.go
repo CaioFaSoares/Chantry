@@ -18,9 +18,14 @@ type GuildRecord struct {
 // RoleRecord maps the "roles" collection schema.
 type RoleRecord struct {
 	PBRecord
-	DiscordID string `json:"discord_id"`
-	Name      string `json:"name"`
-	GuildID   string `json:"guild_id"` // relation to guilds (max 1)
+	DiscordID        string `json:"discord_id"`
+	Name             string `json:"name"`
+	GuildID          string `json:"guild_id"` // relation to guilds (max 1)
+	Shift            string `json:"shift"`
+	CheckInTime      string `json:"check_in_time"`
+	CheckoutCooldown int    `json:"checkout_cooldown"`
+	IsMonitored      bool   `json:"is_monitored"`
+	IsActive         bool   `json:"is_active"`
 }
 
 // StudentRecord maps the "students" collection schema.
@@ -53,13 +58,24 @@ type ManagerRecord struct {
 // AttendanceRecord maps the "attendances" collection schema.
 type AttendanceRecord struct {
 	PBRecord
-	StudentID string `json:"student_id"` // relation to students (max 1)
-	Date      string `json:"date"`       // date
-	ClockIn   string `json:"clock_in"`   // date
-	ClockOut  string `json:"clock_out"`  // date
-	Status    string `json:"status"`     // select: pending_checkout, completed, absent, justified, late
-	Source    string `json:"source"`     // select: discord_bot, manual_override
-	Notes     string `json:"notes"`      // notes
+	StudentID          string `json:"student_id"` // relation to students (max 1)
+	Date               string `json:"date"`       // date
+	ClockIn            string `json:"clock_in"`   // date
+	ClockOut           string `json:"clock_out"`  // date
+	Status             string `json:"status"`     // select: pending_checkout, completed, absent, justified, late
+	Source             string `json:"source"`     // select: discord_bot, manual_override
+	Notes              string `json:"notes"`      // notes
+	CheckoutPromptSent bool   `json:"checkout_prompt_sent"` // NOVO
+	Expand             struct {                             // NOVO: Para leitura via query
+		Student struct {
+			Username  string `json:"username"` // NOVO
+			Nickname  string `json:"nickname"` // NOVO
+			ChannelID string `json:"channel_id"`
+			Role      struct {
+				CheckoutCooldown int `json:"checkout_cooldown"`
+			} `json:"role_id"`
+		} `json:"student_id"`
+	} `json:"expand"`
 }
 
 // ActivityRecord maps the "activities" collection schema.
