@@ -165,3 +165,34 @@ func (r *Repository) UpdateRecord(collection string, pbID string, data interface
 
 	return nil
 }
+
+// FindManagersByGuild searches PocketBase for all manager records associated with a specific guild ID.
+// Because the 'guilds' field in the 'managers' collection is a multiple-relation field,
+// it performs a query using the '~' (contains) filter operator.
+func (r *Repository) FindManagersByGuild(guildID string) ([]ManagerRecord, error) {
+	filter := fmt.Sprintf("guilds~'%s'", guildID)
+	endpoint := fmt.Sprintf("api/collections/managers/records?filter=%s", url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for managers: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var managers []ManagerRecord
+	if err := json.Unmarshal(listResp.Items, &managers); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal managers array: %w", err)
+	}
+
+	return managers, nil
+}

@@ -100,6 +100,8 @@ func runFiberApp() {
 	api.Get("/discord/guilds", discordHandler.HandleGetGuilds)
 	api.Get("/discord/guilds/:guildId/roles", discordHandler.HandleGetGuildRoles)
 	api.Get("/discord/guilds/:guildId/members", discordHandler.HandleGetGuildMembers)
+	api.Get("/discord/guilds/:guildId/categories", discordHandler.HandleGetCategories)
+	api.Post("/discord/guilds/:guildId/categories", discordHandler.HandleCreateCategory)
 
 	// Synchronization Route (Logical Upsert)
 	api.Post("/sync/guilds/:guildId/members", syncHandler.HandleSyncMembers)

@@ -79,3 +79,56 @@ func (h *DiscordHandler) HandleGetGuildMembers(c *fiber.Ctx) error {
 
 	return c.JSON(members)
 }
+
+// HandleGetCategories lists all categories created on a Discord server
+func (h *DiscordHandler) HandleGetCategories(c *fiber.Ctx) error {
+	guildID := c.Params("guildId")
+	if guildID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "guildId parameter is required in the path route",
+		})
+	}
+
+	categories, err := h.DiscordService.GetGuildCategories(guildID)
+	if err != nil {
+		log.Printf("❌ ERROR [GetGuildCategories] for Guild ID %s: %v", guildID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve Discord categories: " + err.Error(),
+		})
+	}
+
+	return c.JSON(categories)
+}
+
+// HandleCreateCategory creates a new channel category on a Discord server
+func (h *DiscordHandler) HandleCreateCategory(c *fiber.Ctx) error {
+	guildID := c.Params("guildId")
+	if guildID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "guildId parameter is required in the path route",
+		})
+	}
+
+	var req discord.CreateCategoryRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body format",
+		})
+	}
+
+	if req.Name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Category name cannot be empty",
+		})
+	}
+
+	category, err := h.DiscordService.CreateCategory(guildID, req.Name, req.Position)
+	if err != nil {
+		log.Printf("❌ ERROR [CreateCategory] for Guild ID %s with Name %q: %v", guildID, req.Name, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to create category on Discord: " + err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(category)
+}
