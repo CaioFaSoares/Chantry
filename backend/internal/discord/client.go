@@ -17,6 +17,9 @@ func NewDiscordService(botToken string) (*DiscordService, error) {
 		return nil, err
 	}
 
+	// Enable gateway intents so the bot can fetch guilds and server members list
+	session.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMembers
+
 	return &DiscordService{
 		Session: session,
 	}, nil

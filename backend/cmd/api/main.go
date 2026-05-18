@@ -58,6 +58,7 @@ func main() {
 	api := app.Group("/api")
 	api.Get("/discord/guilds", discordHandler.HandleGetGuilds)
 	api.Get("/discord/guilds/:guildId/roles", discordHandler.HandleGetGuildRoles)
+	api.Get("/discord/guilds/:guildId/members", discordHandler.HandleGetGuildMembers)
 
 	// Get port from environment or fallback to 12000
 	port := os.Getenv("PORT")

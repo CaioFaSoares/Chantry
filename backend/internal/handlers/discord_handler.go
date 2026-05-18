@@ -51,3 +51,31 @@ func (h *DiscordHandler) HandleGetGuildRoles(c *fiber.Ctx) error {
 
 	return c.JSON(roles)
 }
+
+// HandleGetGuildMembers fetches and returns server (Guild) members holding a specified role
+func (h *DiscordHandler) HandleGetGuildMembers(c *fiber.Ctx) error {
+	guildID := c.Params("guildId")
+	roleID := c.Query("roleId")
+
+	if guildID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "guildId parameter is required in the path route",
+		})
+	}
+
+	if roleID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "roleId query parameter is required",
+		})
+	}
+
+	members, err := h.DiscordService.GetGuildMembersByRole(guildID, roleID)
+	if err != nil {
+		log.Printf("❌ ERROR [GetGuildMembers] for Guild ID %s and Role ID %s: %v", guildID, roleID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(members)
+}

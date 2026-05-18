@@ -7,6 +7,14 @@ type SimpleEntity struct {
 	Name string `json:"name"`
 }
 
+// SimpleMember represents a minimized member output structure (DTO) to prevent
+// leaking sensitive fields like email, avatar hashes, or authorization permissions.
+type SimpleMember struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Nickname string `json:"nickname"`
+}
+
 // GetGuilds queries the Discord REST API to fetch all servers (Guilds)
 // where the bot is currently added and authorized.
 func (s *DiscordService) GetGuilds() ([]SimpleEntity, error) {
@@ -48,4 +56,58 @@ func (s *DiscordService) GetGuildRoles(guildID string) ([]SimpleEntity, error) {
 	}
 
 	return roles, nil
+}
+
+// GetGuildMembersByRole fetches all server (Guild) members using cursor pagination,
+// returning only the users holding the specified roleID mapped to our SimpleMember DTO.
+func (s *DiscordService) GetGuildMembersByRole(guildID, roleID string) ([]SimpleMember, error) {
+	filteredMembers := make([]SimpleMember, 0)
+	after := ""
+
+	for {
+		// Query members list page, max 1000 items starting after the given user ID.
+		members, err := s.Session.GuildMembers(guildID, after, 1000)
+		if err != nil {
+			return nil, err
+		}
+
+		// Empty response means we've successfully iterated through the entire membership list.
+		if len(members) == 0 {
+			break
+		}
+
+		for _, m := range members {
+			// Skip users who have null profiles or empty credentials (defensive checks)
+			if m.User == nil {
+				continue
+			}
+
+			// Verify if the user possesses the target role ID
+			hasRole := false
+			for _, r := range m.Roles {
+				if r == roleID {
+					hasRole = true
+					break
+				}
+			}
+
+			if hasRole {
+				filteredMembers = append(filteredMembers, SimpleMember{
+					ID:       m.User.ID,
+					Username: m.User.Username,
+					Nickname: m.Nick,
+				})
+			}
+		}
+
+		// If we fetched fewer items than the max limit of 1000, we've naturally reached the end
+		if len(members) < 1000 {
+			break
+		}
+
+		// Update the pagination cursor to start after the last processed user's ID
+		after = members[len(members)-1].User.ID
+	}
+
+	return filteredMembers, nil
 }
