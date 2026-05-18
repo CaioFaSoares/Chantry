@@ -1,8 +1,12 @@
 package main
 
 import (
+	"log"
 	"os"
 	"time"
+
+	"chantry/backend/internal/config"
+	"chantry/backend/internal/discord"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -10,6 +14,19 @@ import (
 )
 
 func main() {
+	// 1. Load Configurations from environment (fails early if invalid)
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("❌ FATAL: Erro ao carregar as configurações: %v", err)
+	}
+
+	// 2. Initialize Discord Client Service
+	_, err = discord.NewDiscordService(cfg.DiscordBotToken)
+	if err != nil {
+		log.Fatalf("❌ FATAL: Erro ao inicializar o cliente Discord: %v", err)
+	}
+	log.Println("✅ Cliente Discord inicializado com sucesso")
+
 	// Initialize Fiber App with dynamic configuration
 	app := fiber.New(fiber.Config{
 		AppName: "Chantry Go Daemon v0.1.0",
