@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: chantry_streamlit
     ports:
-      - "8501:8501"
+      - "12501:8501"
     volumes:
       - ./streamlit:/app
     environment:
@@ -15,12 +15,13 @@ services:
     restart: unless-stopped
     depends_on:
       - n8n
+      - go-server
 
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
     container_name: chantry_n8n
     ports:
-      - "5678:5678"
+      - "12678:5678"
     volumes:
       - ./n8n_data:/home/node/.n8n
     environment:
@@ -28,7 +29,7 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - N8N_METRICS=true
-      - WEBHOOK_URL=http://localhost:5678/
+      - WEBHOOK_URL=http://localhost:12678/
       - GENERIC_TIMEZONE=America/Sao_Paulo
     restart: unless-stopped
 
@@ -36,7 +37,22 @@ services:
     image: ghcr.io/muchobien/pocketbase:latest
     container_name: chantry_pocketbase
     ports:
-      - "8090:8090"
+      - "12090:8090"
     volumes:
       - ./pb_data:/pb_data
     restart: unless-stopped
+
+  go-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chantry_go_server
+    ports:
+      - "12000:12000"
+    environment:
+      - PORT=12000
+      - POCKETBASE_URL=http://pocketbase:8090
+      - DISCORD_BOT_TOKEN=
+    restart: unless-stopped
+    depends_on:
+      - pocketbase

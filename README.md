@@ -1,8 +1,12 @@
 # 🌌 Chantry Orchestration Platform
 
-Este é o ambiente inicial do projeto **Chantry**, estruturado para permitir prototipagem rápida e desenvolvimento ágil de Provas de Conceito (POCs) utilizando **Streamlit** para a interface interativa, **n8n** para automação/orquestração visual de fluxos e **PocketBase** como um banco de dados e backend em tempo real super leve.
+Este é o ambiente inicial do projeto **Chantry**, estruturado para permitir prototipagem rápida e desenvolvimento ágil de Provas de Conceito (POCs). O Chantry utiliza:
+* **Streamlit:** Interface interativa e dinâmica para visualizações e sandbox de comandos.
+* **Go Backend Daemon (`go-server`):** O "cérebro" de alta performance da aplicação, responsável por conexões nativas com a API do Discord, processamento de Cronjobs e sincronizações de dados.
+* **n8n:** Orquestrador visual de fluxos de automações e webhooks.
+* **PocketBase:** Banco de dados relacional (SQLite) e autenticação em tempo real super leve.
 
-Todos os serviços estão integrados via **Docker Compose** e configurados para total persistência de dados local no diretório do projeto.
+Todos os serviços estão integrados via **Docker Compose** e configurados em uma faixa de **portas isoladas (série `12XXX`)** para garantir conflito zero com qualquer outro projeto local.
 
 ---
 
@@ -10,17 +14,23 @@ Todos os serviços estão integrados via **Docker Compose** e configurados para 
 
 ```text
 Chantry/
-├── .gitignore             # Evita commitar caches, logs e arquivos temporários
+├── .gitignore             # Evita commitar caches, logs, binários Go e journals de banco
 ├── README.md              # Este manual de instruções
-├── docker-compose.yml     # Orquestrador dos containers Streamlit, n8n e PocketBase
-├── n8n_data/              # [IMPORTANTE] SQLite e configurações do n8n (salvo localmente!)
-├── pb_data/               # [IMPORTANTE] SQLite, configurações e uploads do PocketBase (salvo localmente!)
-└── streamlit/             # Diretório do aplicativo Streamlit
+├── docker-compose.yml     # Orquestrador dos containers Streamlit, Go, n8n e PocketBase
+├── n8n_data/              # [IMPORTANTE] SQLite e configurações persistentes do n8n
+├── pb_data/               # [IMPORTANTE] SQLite, tabelas e uploads do PocketBase
+├── backend/               # [NOVO] Serviço backend de alta performance em Go
+│   ├── cmd/
+│   │   └── api/
+│   │       └── main.go    # Entrypoint (servidor Fiber com Logger/CORS e Healthcheck)
+│   ├── Dockerfile         # Dockerfile de compilação multi-stage (Docker Alpine)
+│   └── go.mod             # Mod do Go module
+└── streamlit/             # Diretório do aplicativo Streamlit (Frontend)
     ├── .streamlit/
     │   └── config.toml    # Tema premium escuro (Deep Dark Indigo Theme)
     ├── Dockerfile         # Dockerfile de build para o Streamlit (Python 3.11-slim corrigido)
     ├── requirements.txt   # Dependências python (Pandas, Plotly, Requests, etc.)
-    ├── app.py             # Landing Page, status unificado e Sandbox de webhooks
+    ├── app.py             # Landing Page de 4 colunas e Sandbox de Webhooks
     └── pages/
         └── 1_n8n_guide.py # Guia dinâmico de integrações
 ```
@@ -38,11 +48,12 @@ Chantry/
    ```bash
    docker compose up --build
    ```
-2. Aguarde o download das imagens e a compilação local da imagem do Streamlit.
-3. Acesse os serviços nos links abaixo:
-   * 💻 **Streamlit Dashboard:** [http://localhost:8501](http://localhost:8501)
-   * ⚙️ **n8n Automation Engine:** [http://localhost:5678](http://localhost:5678)
-   * 🗄️ **PocketBase Backend:** [http://localhost:8090/_/](http://localhost:8090/_/) (Painel Admin)
+2. O Docker compilará automaticamente a imagem do Streamlit e a imagem do Go Backend (via build multi-stage, **sem necessitar de instalação local do Go ou dependências no seu host**).
+3. Acesse os serviços locais através das portas da série `12XXX`:
+   * 💻 **Streamlit Dashboard:** [http://localhost:12501](http://localhost:12501)
+   * ⚙️ **n8n Automation Engine:** [http://localhost:12678](http://localhost:12678)
+   * 🗄️ **PocketBase Admin Panel:** [http://localhost:12090/_/](http://localhost:12090/_/)
+   * 🐹 **Go Backend Healthcheck:** [http://localhost:12000/api/health](http://localhost:12000/api/health)
 
 ---
 
@@ -70,7 +81,7 @@ Se você preferir executar o **Streamlit localmente** fora do Docker (por exempl
    ```bash
    pip install -r streamlit/requirements.txt
    ```
-4. Inicie o Streamlit:
+4. Inicie o Streamlit localmente (observe que por padrão ele iniciará na porta `8501`, mas consumirá os serviços Docker que estiverem ativos):
    ```bash
    streamlit run streamlit/app.py
    ```

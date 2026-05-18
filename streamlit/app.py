@@ -168,13 +168,14 @@ st.sidebar.info("🚀 **Dica:** Ative o Docker Desktop e rode `docker compose up
 st.markdown("<h1 class='main-header'>Chantry Orchestration</h1>", unsafe_allow_html=True)
 st.markdown("<p class='subtitle'>Console unificado para prototipagem de POCs e fluxos automatizados de dados</p>", unsafe_allow_html=True)
 
-# Check active statuses
-n8n_online = check_service_status("n8n", 5678) or check_service_status("localhost", 5678)
-pocketbase_online = check_service_status("pocketbase", 8090) or check_service_status("localhost", 8090)
+# Check active statuses (checks internal Docker name first, then maps to local 12XXX safe ports)
+n8n_online = check_service_status("n8n", 5678) or check_service_status("localhost", 12678)
+pocketbase_online = check_service_status("pocketbase", 8090) or check_service_status("localhost", 12090)
+go_online = check_service_status("go-server", 12000) or check_service_status("localhost", 12000)
 streamlit_online = True # We are currently running it!
 
-# Status Cards Layout
-col1, col2, col3 = st.columns(3)
+# Status Cards Layout (Unified grid of 4 columns)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     badge_html = "<span class='badge badge-online'>Online</span>" if streamlit_online else "<span class='badge badge-offline'>Offline</span>"
@@ -184,35 +185,49 @@ with col1:
         <div class='card-desc'>
             Interface principal do Chantry construída para visualizações dinâmicas, validação rápida de hipóteses e central de comandos de APIs.
         </div>
-        <p style='color:#64748B; font-size:0.85rem; margin-bottom: 20px;'>Porta Host: <b>8501</b> | Caminho: <code>./streamlit/app.py</code></p>
+        <p style='color:#64748B; font-size:0.85rem; margin-bottom: 20px;'>Porta Host: <b>12501</b> | Caminho: <code>./streamlit/app.py</code></p>
         <a href="#" class="btn-secondary" style="pointer-events: none; opacity: 0.6;">Você já está aqui</a>
     </div>
     """, unsafe_allow_html=True)
 
 with col2:
     badge_html = "<span class='badge badge-online'>Online</span>" if n8n_online else "<span class='badge badge-offline'>Offline</span>"
-    action_btn = '<a href="http://localhost:5678" target="_blank" class="btn-action">Abrir Painel n8n</a>' if n8n_online else '<a href="http://localhost:5678" target="_blank" class="btn-secondary">Tentar Acessar</a>'
+    action_btn = '<a href="http://localhost:12678" target="_blank" class="btn-action">Abrir Painel n8n</a>' if n8n_online else '<a href="http://localhost:12678" target="_blank" class="btn-secondary">Tentar Acessar</a>'
     st.markdown(f"""
     <div class='card'>
         <div class='card-title'>⚙️ n8n Automation Engine {badge_html}</div>
         <div class='card-desc'>
             Orquestrador de fluxos de trabalho visuais baseado em nós. Útil para criação ágil de integrações, consumo de Webhooks e transformações de payloads.
         </div>
-        <p style='color:#64748B; font-size:0.85rem; margin-bottom: 20px;'>Porta Host: <b>5678</b> | Persistência: <code>n8n_data</code> (SQLite)</p>
+        <p style='color:#64748B; font-size:0.85rem; margin-bottom: 20px;'>Porta Host: <b>12678</b> | Persistência: <code>n8n_data</code> (SQLite)</p>
         {action_btn}
     </div>
     """, unsafe_allow_html=True)
 
 with col3:
     badge_html = "<span class='badge badge-online'>Online</span>" if pocketbase_online else "<span class='badge badge-offline'>Offline</span>"
-    action_btn = '<a href="http://localhost:8090/_/" target="_blank" class="btn-action">Abrir Painel Admin</a>' if pocketbase_online else '<a href="http://localhost:8090/_/" target="_blank" class="btn-secondary">Tentar Acessar</a>'
+    action_btn = '<a href="http://localhost:12090/_/" target="_blank" class="btn-action">Abrir Painel Admin</a>' if pocketbase_online else '<a href="http://localhost:12090/_/" target="_blank" class="btn-secondary">Tentar Acessar</a>'
     st.markdown(f"""
     <div class='card'>
         <div class='card-title'>🗄️ PocketBase Backend {badge_html}</div>
         <div class='card-desc'>
             Banco de dados relacional super leve e em tempo real. Inclui autenticação robusta, APIs automáticas e painel administrativo intuitivo embutido.
         </div>
-        <p style='color:#64748B; font-size:0.85rem; margin-bottom: 20px;'>Porta Host: <b>8090</b> | Persistência: <code>pb_data</code> (SQLite & Files)</p>
+        <p style='color:#64748B; font-size:0.85rem; margin-bottom: 20px;'>Porta Host: <b>12090</b> | Persistência: <code>pb_data</code> (SQLite & Files)</p>
+        {action_btn}
+    </div>
+    """, unsafe_allow_html=True)
+
+with col4:
+    badge_html = "<span class='badge badge-online'>Online</span>" if go_online else "<span class='badge badge-offline'>Offline</span>"
+    action_btn = '<a href="http://localhost:12000/api/health" target="_blank" class="btn-action">Abrir Healthcheck</a>' if go_online else '<a href="http://localhost:12000/api/health" target="_blank" class="btn-secondary">Tentar Acessar</a>'
+    st.markdown(f"""
+    <div class='card'>
+        <div class='card-title'>🐹 Go Backend Daemon {badge_html}</div>
+        <div class='card-desc'>
+            Serviço core em Go de alta performance. Responsável pelas integrações com Discord API, execução de cronjobs agendados e mutações no PocketBase.
+        </div>
+        <p style='color:#64748B; font-size:0.85rem; margin-bottom: 20px;'>Porta Host: <b>12000</b> | Tecnologia: <code>Go + Fiber</code></p>
         {action_btn}
     </div>
     """, unsafe_allow_html=True)
@@ -232,7 +247,7 @@ sandbox_col1, sandbox_col2 = st.columns([3, 2])
 with sandbox_col1:
     webhook_url = st.text_input(
         "URL do Webhook do n8n (Webhook Node - Test URL)",
-        value="http://localhost:5678/webhook-test/minha-poc-id",
+        value="http://localhost:12678/webhook-test/minha-poc-id",
         placeholder="Cole a URL do webhook criada no n8n"
     )
     

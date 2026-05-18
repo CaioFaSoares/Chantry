@@ -1,0 +1,3 @@
+module chantry/backend
+
+go 1.21

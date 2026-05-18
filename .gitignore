@@ -31,6 +31,12 @@ pb_data/*.db-wal
 
 
 
+# Go compiled bin/out files
+backend/bin/
+backend/*.out
+backend/*.test
+backend/*.prof
+
 # OS-specific
 .DS_Store
 Thumbs.db
