@@ -159,7 +159,7 @@ def check_service_status(host, port):
     return False
 
 # Sidebar
-st.sidebar.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80", use_column_width=True)
+st.sidebar.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80", width=True)
 st.sidebar.markdown("<h2 style='text-align: center;'>Chantry Suite</h2>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 st.sidebar.info("🚀 **Dica:** Ative o Docker Desktop e rode `docker compose up` para subir todos os serviços de uma vez.")

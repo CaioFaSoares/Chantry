@@ -1,5 +1,9 @@
 package discord
 
+import (
+	"log"
+)
+
 // SimpleEntity represents a minimized output structure (DTO) to prevent
 // internal data leaks and leak only public-facing structural properties.
 type SimpleEntity struct {
@@ -92,10 +96,22 @@ func (s *DiscordService) GetGuildMembersByRole(guildID, roleID string) ([]Simple
 			}
 
 			if hasRole {
+				// Hierarchical nickname resolution
+				nickname := m.Nick
+				if nickname == "" {
+					nickname = m.User.GlobalName
+				}
+				if nickname == "" {
+					nickname = m.User.Username
+				}
+
+				log.Printf("[DEBUG-NICK] User: %s (%s) | Nick: %q | GlobalName: %q | ResolvedNickname: %q", 
+					m.User.Username, m.User.ID, m.Nick, m.User.GlobalName, nickname)
+
 				filteredMembers = append(filteredMembers, SimpleMember{
 					ID:       m.User.ID,
 					Username: m.User.Username,
-					Nickname: m.Nick,
+					Nickname: nickname,
 				})
 			}
 		}
