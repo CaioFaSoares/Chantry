@@ -27,14 +27,15 @@ type RoleRecord struct {
 // Note: Includes "user_id" which is added programmatically during migration to associate with system users.
 type StudentRecord struct {
 	PBRecord
-	DiscordID string `json:"discord_id"`
-	Username  string `json:"username"`
-	Nickname  string `json:"nickname"`
-	RoleID    string `json:"role_id"`            // relation to roles (max 1)
-	GuildID   string `json:"guild_id"`           // relation to guilds (max 1)
-	ChannelID string `json:"channel_id"`         // Discord channel ID
-	Status    string `json:"status"`             // select: active, inactive, dropped
-	UserID    string `json:"user_id,omitempty"` // relation to _pb_users_auth_ (max 1)
+	DiscordID      string   `json:"discord_id"`
+	Username       string   `json:"username"`
+	Nickname       string   `json:"nickname"`
+	RoleID         string   `json:"role_id"`            // relation to roles (max 1)
+	SecondaryRoles []string `json:"secondary_roles"`     // relation to roles (multiple)
+	GuildID        string   `json:"guild_id"`           // relation to guilds (max 1)
+	ChannelID      string   `json:"channel_id"`         // Discord channel ID
+	Status         string   `json:"status"`             // select: active, inactive, dropped
+	UserID         string   `json:"user_id,omitempty"` // relation to _pb_users_auth_ (max 1)
 }
 
 // ManagerRecord maps the "managers" collection schema.

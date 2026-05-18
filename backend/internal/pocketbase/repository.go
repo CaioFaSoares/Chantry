@@ -77,6 +77,53 @@ func (r *Repository) FindFirstByDiscordID(collection string, discordID string, d
 	return true, nil
 }
 
+// FindFirstByDiscordAndGuild searches for a record inside the target collection using its Discord Snowflake ID and the PocketBase Guild ID relation.
+// If found, it populates the dest interface (pointer to struct) and returns true, nil.
+// If not found, it returns false, nil.
+func (r *Repository) FindFirstByDiscordAndGuild(collection string, discordID string, guildID string, dest interface{}) (bool, error) {
+	filter := fmt.Sprintf("discord_id='%s' && guild_id='%s'", discordID, guildID)
+	endpoint := fmt.Sprintf("api/collections/%s/records?filter=%s&limit=1", collection, url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to query pocketbase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return false, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	if listResp.TotalItems == 0 {
+		return false, nil
+	}
+
+	var items []json.RawMessage
+	if err := json.Unmarshal(listResp.Items, &items); err != nil {
+		return false, fmt.Errorf("failed to parse items array: %w", err)
+	}
+
+	if len(items) == 0 {
+		return false, nil
+	}
+
+	if err := json.Unmarshal(items[0], dest); err != nil {
+		return false, fmt.Errorf("failed to unmarshal target record: %w", err)
+	}
+
+	return true, nil
+}
+
 // CreateRecord creates a new record inside the target collection and unmarshals the response with the generated PocketBase ID.
 func (r *Repository) CreateRecord(collection string, data interface{}, dest interface{}) error {
 	endpoint := fmt.Sprintf("api/collections/%s/records", collection)

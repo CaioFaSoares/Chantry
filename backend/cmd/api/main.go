@@ -10,6 +10,7 @@ import (
 	"chantry/backend/internal/handlers"
 	_ "chantry/backend/internal/migrations" // Automatically registers Go migrations
 	pbclient "chantry/backend/internal/pocketbase"
+	"chantry/backend/internal/usecases"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -65,6 +66,10 @@ func runFiberApp() {
 	log.Println("✅ PocketBase Client autenticado com sucesso")
 
 	// 4. Initialize HTTP handlers/controllers
+	pbRepo := pbclient.NewRepository(pbClient)
+	syncUsecase := usecases.NewSyncUsecase(discordService, pbRepo)
+	syncHandler := handlers.NewSyncHandler(syncUsecase)
+
 	discordHandler := handlers.NewDiscordHandler(discordService)
 
 	// Initialize Fiber App with dynamic configuration
@@ -95,6 +100,10 @@ func runFiberApp() {
 	api.Get("/discord/guilds", discordHandler.HandleGetGuilds)
 	api.Get("/discord/guilds/:guildId/roles", discordHandler.HandleGetGuildRoles)
 	api.Get("/discord/guilds/:guildId/members", discordHandler.HandleGetGuildMembers)
+
+	// Synchronization Route (Logical Upsert)
+	api.Post("/sync/guilds/:guildId/members", syncHandler.HandleSyncMembers)
+	api.Post("/sync/guilds/:guildId/advanced", syncHandler.HandleAdvancedSync)
 
 	// Get port from environment or fallback to 12000
 	port := os.Getenv("PORT")

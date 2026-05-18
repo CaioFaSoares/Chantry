@@ -14,9 +14,10 @@ type SimpleEntity struct {
 // SimpleMember represents a minimized member output structure (DTO) to prevent
 // leaking sensitive fields like email, avatar hashes, or authorization permissions.
 type SimpleMember struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Nickname string `json:"nickname"`
+	ID       string   `json:"id"`
+	Username string   `json:"username"`
+	Nickname string   `json:"nickname"`
+	Roles    []string `json:"roles"`
 }
 
 // GetGuilds queries the Discord REST API to fetch all servers (Guilds)
@@ -112,6 +113,7 @@ func (s *DiscordService) GetGuildMembersByRole(guildID, roleID string) ([]Simple
 					ID:       m.User.ID,
 					Username: m.User.Username,
 					Nickname: nickname,
+					Roles:    m.Roles,
 				})
 			}
 		}

@@ -224,10 +224,26 @@
           "maxSelect": 1,
           "values": ["active", "inactive", "dropped"]
         }
+      },
+      {
+        "system": false,
+        "id": "fld_student_sec_roles",
+        "name": "secondary_roles",
+        "type": "relation",
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "col_roles123456",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": null,
+          "displayFields": null
+        }
       }
     ],
     "indexes": [
-      "CREATE UNIQUE INDEX `idx_students_discord_id` ON `students` (`discord_id`)"
+      "CREATE UNIQUE INDEX `idx_students_discord_guild` ON `students` (`discord_id`, `guild_id`)"
     ],
     "listRule": "",
     "viewRule": "",
