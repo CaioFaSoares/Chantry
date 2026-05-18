@@ -1,0 +1,42 @@
+services:
+  streamlit:
+    build:
+      context: ./streamlit
+      dockerfile: Dockerfile
+    container_name: chantry_streamlit
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./streamlit:/app
+    environment:
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    restart: unless-stopped
+    depends_on:
+      - n8n
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: chantry_n8n
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_METRICS=true
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+    restart: unless-stopped
+
+  pocketbase:
+    image: ghcr.io/muchobien/pocketbase:latest
+    container_name: chantry_pocketbase
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./pb_data:/pb_data
+    restart: unless-stopped

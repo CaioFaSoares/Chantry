@@ -1,0 +1,36 @@
+# Python bytecode and caches
+**/__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Streamlit credentials & secrets (keep config.toml tracked for theme)
+.streamlit/secrets.toml
+
+# n8n local data (tracking database.sqlite and configurations in the repository)
+# If you want to ignore everything in n8n_data, uncomment the line below:
+# n8n_data/
+n8n_data/crashJournal.json
+n8n_data/binaryData/
+n8n_data/*.log
+n8n/
+.n8n/
+
+# PocketBase local data (tracking databases and configs in the repository)
+# If you want to ignore everything in pb_data, uncomment the line below:
+# pb_data/
+pb_data/*.db-shm
+pb_data/*.db-wal
+
+
+
+# OS-specific
+.DS_Store
+Thumbs.db
