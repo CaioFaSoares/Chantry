@@ -35,6 +35,7 @@ type StudentRecord struct {
 	GuildID        string   `json:"guild_id"`           // relation to guilds (max 1)
 	ChannelID      string   `json:"channel_id"`         // Discord channel ID
 	Status         string   `json:"status"`             // select: active, inactive, dropped
+	Shift          string   `json:"shift"`              // select: morning, afternoon, night
 	UserID         string   `json:"user_id,omitempty"` // relation to _pb_users_auth_ (max 1)
 }
 
@@ -54,7 +55,9 @@ type AttendanceRecord struct {
 	PBRecord
 	StudentID string `json:"student_id"` // relation to students (max 1)
 	Date      string `json:"date"`       // date
-	Status    string `json:"status"`     // select: present, absent, justified, late
+	ClockIn   string `json:"clock_in"`   // date
+	ClockOut  string `json:"clock_out"`  // date
+	Status    string `json:"status"`     // select: pending_checkout, completed, absent, justified, late
 	Source    string `json:"source"`     // select: discord_bot, manual_override
 	Notes     string `json:"notes"`      // notes
 }

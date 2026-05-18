@@ -240,6 +240,19 @@
           "maxSelect": null,
           "displayFields": null
         }
+      },
+      {
+        "system": false,
+        "id": "fld_student_shift",
+        "name": "shift",
+        "type": "select",
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSelect": 1,
+          "values": ["morning", "afternoon", "night"]
+        }
       }
     ],
     "indexes": [
@@ -363,6 +376,32 @@
       },
       {
         "system": false,
+        "id": "fld_att_clock_in",
+        "name": "clock_in",
+        "type": "date",
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "system": false,
+        "id": "fld_att_clock_out",
+        "name": "clock_out",
+        "type": "date",
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "system": false,
         "id": "fld_att_status",
         "name": "status",
         "type": "select",
@@ -371,7 +410,7 @@
         "unique": false,
         "options": {
           "maxSelect": 1,
-          "values": ["present", "absent", "justified", "late"]
+          "values": ["pending_checkout", "completed", "absent", "justified", "late"]
         }
       },
       {
