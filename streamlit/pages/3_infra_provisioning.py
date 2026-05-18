@@ -98,7 +98,12 @@ def create_category(guild_id, name, position):
             json={"name": name, "position": position},
             timeout=10.0
         )
-        return {"success": resp.status_code == 200, "data": resp.json() if resp.status_code == 200 else resp.text}
+        success = resp.status_code in [200, 201]
+        return {
+            "success": success,
+            "data": resp.json() if success else None,
+            "error": resp.text if not success else None
+        }
     except Exception as e:
         return {"success": False, "error": str(e)}
 

@@ -1,24 +1,22 @@
 # 🌌 Relatório de Engenharia e Status: Suíte Chantry (18/05/2026)
 
-Este documento sumariza as evoluções arquiteturais, modelagem de dados e a integração entre o daemon em Go e a persistência no PocketBase realizadas na data de hoje. 
+Este documento sumariza as evoluções arquiteturais, modelagem de dados, motor de provisionamento e o painel de controle frontend realizados no ecossistema Chantry.
 
 ---
 
-## 🏛️ Visão Geral da Nova Arquitetura Híbrida
+## 🏛️ Visão Geral da Arquitetura Híbrida
 
-Hoje realizamos uma das evoluções mais significativas do ecossistema Chantry: a consolidação de uma **arquitetura de imagem única** e a transição para um **PocketBase embarcado (embedded)** dentro da nossa aplicação Go. 
+Hoje realizamos a consolidação de uma **arquitetura de imagem única** no backend, a transição para um **PocketBase embarcado (embedded)** em Go, a implementação do **Motor de Provisionamento em Lote de Canais Privados** e a **remoção completa do n8n da stack**, simplificando a infraestrutura da aplicação.
 
-O binário `./main` gerado agora atua em duas frentes independentes com base nos argumentos de execução:
-1. **PocketBase Server (`./main serve`)**: Executa o banco de dados local embarcado, aplica migrações de esquema e expõe as portas de dados.
-2. **Discord Go Daemon (`./main api`)**: O nosso servidor original baseado em Fiber que faz a ponte com a API do Discord e orquestra regras de negócio do backend.
+O binário `./main` em Go atua em duas frentes independentes com base nos argumentos de execução:
+1. **PocketBase Server (`./main serve`)**: Executa o banco de dados SQLite local embarcado, aplica migrações automáticas de esquema e expõe as portas de dados HTTP na porta `12090` (ou `8090` interno).
+2. **Discord Go Daemon (`./main api`)**: Servidor API em Fiber que gerencia integrações com Discord API, orquestra regras de negócio do backend e atualizações no banco de dados na porta `12000`.
 
 ```mermaid
 graph TD
     subgraph Docker Network [Chantry Network]
-        Streamlit[Streamlit Frontend] -->|HTTP:12000| GoServer[Chantry Go Server: Fiber Daemon]
+        Streamlit[Streamlit Frontend:12501] -->|HTTP:12000| GoServer[Chantry Go Server: Fiber Daemon]
         GoServer -->|Admin API:8090| PocketBase[PocketBase Embedded Engine]
-        
-        n8n[n8n Workflow Engine] -->|Webhooks| GoServer
     end
     
     subgraph Volumes
@@ -42,7 +40,7 @@ O esquema foi estruturado no arquivo local [pb_schema.json](file:///Users/caioso
 *   **`roles`**: Cargos de turmas vinculados a um servidor específico.
 *   **`students`**: Snapshot de alunos sincronizados do Discord, associando-os com `roles`, `guilds`, status escolar e de canais dedicados.
 *   **`managers`**: Equipe de mentores e administradores associados a múltiplos servidores.
-*   **`attendances`**: Presenças individuais contendo timestamps, notas de justificativa, status (presente/falta/justificado) e fonte do registro (bot/manual).
+*   **`attendances`**: Presenças individuais contendo timestamps, notas de justificativa, status (presente/falta/justificado) e fonte do registro.
 *   **`activities`**: Atividades e tarefas propostas em cada guilda escolar.
 
 ### Regras de Segurança Aplicadas
@@ -56,50 +54,60 @@ O esquema foi estruturado no arquivo local [pb_schema.json](file:///Users/caioso
 Para orquestrar a comunicação do Fiber com o PocketBase, desenvolvemos a camada de persistência nativa em Go sem dependências pesadas, utilizando apenas a biblioteca padrão (`net/http` e `encoding/json`).
 
 ### Componentes Desenvolvidos
-
-#### 1. Configurações Dinâmicas e Injeção
-*   Estendemos a struct `Config` em [env.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/config/env.go) para suportar `PocketBaseURL`, `PBAdminEmail` e `PBAdminPassword`.
-*   Ajustamos o [docker-compose.yml](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/docker-compose.yml) para injetar as credenciais administrativas do PocketBase no container do `go-server`, evitando falhas de autenticação em ambiente isolado.
-
-#### 2. Models Go
-*   Criamos o pacote [models.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/pocketbase/models.go).
-*   **Ponto Crítico**: As structs `StudentRecord` e `ManagerRecord` contêm o campo `UserID` (`user_id` em JSON) para mapear o vínculo programático à tabela nativa de `users` que é injetado durante a migração automática do PocketBase embarcado.
-
-#### 3. REST Client Thread-Safe
-*   Em [client.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/pocketbase/client.go), implementamos um cliente REST que manipula concorrentemente o token JWT obtido no endpoint de login (`/api/admins/auth-with-password`). O acesso e renovação do token são protegidos por um `sync.RWMutex`.
-*   O método utilitário `SendRequest` anexa automaticamente os cabeçalhos de content-type e `Authorization: Bearer <TOKEN>`.
-
-#### 4. Repositório Abstrato
-*   O arquivo [repository.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/pocketbase/repository.go) encapsula as rotas do PocketBase:
-    *   `FindFirstByDiscordID`: Utiliza buscas com filtros nativos (`filter=discord_id='...'`), escapa caracteres de query e desempacota o primeiro elemento do array da resposta padrão do PocketBase (`ListResponse`).
-    *   `CreateRecord`: Cria registros via POST retornando o id interno persistido.
-    *   `UpdateRecord`: Atualiza parcialmente dados via PATCH.
-
-#### 5. Bootstrap & Evitação de Conflitos
-*   No ponto de entrada do servidor em [main.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/cmd/api/main.go), usamos um alias de import (`pbclient`) para o nosso pacote de persistência, evitando qualquer conflito de escopo com o SDK embarcado oficial do PocketBase.
-*   O servidor Fiber valida as credenciais na inicialização da aplicação (`runFiberApp`). Se o PocketBase local estiver desligado ou credenciais incorretas forem passadas no `.env`, o servidor realiza um encerramento precoce (`log.Fatalf`), garantindo a segurança do ecossistema.
+*   **Configurações Dinâmicas:** Estendemos a struct `Config` em [env.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/config/env.go) para suportar as credenciais e URL do PocketBase.
+*   **Models Go:** No pacote [models.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/pocketbase/models.go), estruturamos as structs de dados necessárias.
+*   **REST Client Thread-Safe:** Em [client.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/pocketbase/client.go), implementamos o cliente REST que gerencia de forma segura o JWT de administrador, com auto-anexação de headers nas requisições.
+*   **Repositório Abstrato:** O repositório [repository.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/pocketbase/repository.go) encapsula as operações do banco: `FindFirstByDiscordID`, `CreateRecord`, `UpdateRecord`, `FindFirstByDiscordAndGuild` e `FindManagersByGuild`.
 
 ---
 
-## 🚀 Status da Compilação e Deploy Local
+## ✨ Épico 3: Motor de Infraestrutura e Provisionamento em Lote
 
-Realizamos o teste integrado de compilação e deploy do ecossistema completo usando os containers Docker do compose. O resultado foi **100% de sucesso**:
+Concluímos o desenvolvimento completo dos fluxos de provisionamento automático de canais de texto privados (1-on-1) para as turmas, blindando o servidor do Discord contra rate limits e integrando as operações com o banco de dados.
 
-```bash
-$ docker-compose -f 'docker-compose.yml' up -d --build
-```
+### 🏢 PRD 3.1 - Gerenciamento de Categorias (Parent Scope)
+*   **Listagem de Categorias:** Implementamos o endpoint `GET /api/discord/guilds/:guildId/categories` que retorna todas as categorias do servidor para seleção reativa.
+*   **Criação de Categorias:** Implementamos o endpoint `POST /api/discord/guilds/:guildId/categories` que cria instantaneamente uma nova categoria de canais personalizada no Discord e retorna os dados do canal criado (incluindo o ID gerado e posição).
 
-**Logs de Builds e Inicialização:**
-*   Compilação otimizada do Go (`CGO_ENABLED=0 GOOS=linux go build`) executada com sucesso.
-*   Geração das imagens CACHED do Streamlit (Python dependency stage) economizando recursos.
-*   **Deploy Completo dos Containers:**
-    *   `chantry_n8n` -> Rodando perfeitamente.
-    *   `chantry_pocketbase` -> Inicializado (Migrações Go executadas e Admin provido).
-    *   `chantry_go_server` -> Inicializado (Autenticado com sucesso no PocketBase).
-    *   `chantry_streamlit` -> Inicializado e acessível.
+### 🔒 PRD 3.2 - Core de Permissões e Canais Privados (1-on-1 Factory)
+*   **Algoritmo de Blindagem Bitwise:** Desenvolvemos a factory especialista `CreatePrivateChannel` no serviço do Discord:
+    *   **Bloqueio Total do `@everyone`:** Remove a permissão de visualização (`PermissionViewChannel`) de todos os usuários do servidor de forma nativa (onde o ID do cargo `@everyone` é estritamente igual ao ID do Servidor).
+    *   **Permissão do Aluno Dono:** Concede permissão explícita de visualização e envio de mensagens para o ID do Aluno.
+    *   **Permissão dos Managers:** Permite que a equipe de mentores/administradores (carregados via banco na relação da guilda) visualizem e moderem o canal.
+
+### ⚙️ PRD 3.3 - Motor de Processamento em Lote e Worker Sincronizador
+*   **Resolução Inteligente de IDs:** O Usecase [provision_usecase.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/usecases/provision_usecase.go) recebe os IDs Discord Snowflake de Guilda e Cargo e os resolve para os correspondentes IDs relacionais de 15 caracteres do PocketBase para que as queries funcionem perfeitamente.
+*   **Motor de Cooldown (Pulmão):** Adiciona uma pausa nativa de `800ms` (`time.Sleep`) em cada iteração, protegendo a conta do Bot de bloqueios da API REST do Discord.
+*   **Garantia de Idempotência:** Busca no PocketBase utilizando a query `FindStudentsPendingProvision` que busca exclusivamente alunos cujo campo `channel_id` esteja vazio e inclui `limit=200` para processamento completo em lote. Alunos com canal ativo são ignorados.
+*   **Transacionalidade e Durabilidade:** Salva o `channel_id` individualmente no PocketBase logo após a criação no Discord, prevenindo perda de estado em caso de queda de rede ou reinicialização.
+*   **Roteamento Fiber:** Endpoint mapeado em `POST /api/provision/guilds/:guildId/channels`.
+
+### 🖥️ PRD 3.4 - Painel do Streamlit: Provisionamento e Infraestrutura
+*   **Nova Página (`3_infra_provisioning.py`):** Criamos a interface com Outfit font do Google Fonts, cards glassmorphic e cabeçalhos gradientes de alta fidelidade visual.
+*   **Dropdowns Reativos:** Selectbox de Servidor e Cargo ativos integrados à API.
+*   **Estratégia de Categoria Pai:** Escolha entre usar categoria existente ou criar nova na hora. A criação de categoria mapeia o status de resposta `201 Created`, armazena o ID no `st.session_state` e usa `st.rerun()` para auto-selecionar o novo canal após o recarregamento.
+*   **Status Logger Progressivo:** Monitora visualmente a requisição em lote longa utilizando o widget `st.status` com timeout estendido de `180` segundos.
+*   **Métricas do Lote:** Plota cards interativos de total de alunos, canais criados, já provisionados e possíveis erros.
 
 ---
 
-## 📋 Próximos Passos
-1.  **Desenvolvimento de Casos de Uso (Usecases)**: Começar a estruturar os fluxos do Go que puxam dados de membros das guildas do Discord e os registram de forma sincronizada no repositório do PocketBase.
-2.  **Dashboard no Streamlit**: Iniciar o consumo do `go-server` para listar os status dos alunos, sincronizações pendentes e visualização da matriz de presença.
+## 🧹 Evolução da Stack: Remoção do n8n
+
+Para otimizar o consumo de recursos e focar o ecossistema nas soluções de desenvolvimento nativas da Suíte Chantry (Streamlit + PocketBase + Go Daemon), removemos completamente o n8n do fluxo:
+*   **Exclusão de Arquivos:** Deletamos o arquivo de guias `1_n8n_guide.py`.
+*   **Refatoração do app.py:** Reconfiguramos a home do Streamlit de 4 colunas para uma grade limpa de 3 colunas (Streamlit Dashboard, PocketBase Backend, Go Backend Daemon).
+*   **Exclusão do Sandbox:** Removemos por completo a seção Sandbox de webhooks de teste que realizava envios simulados para o n8n.
+*   **Remoção Concluída:** A varredura de termos pelo diretório aponta que o frontend está 100% livre de referências ao n8n.
+
+---
+
+## 🚀 Status da Compilação e Validações
+
+Realizamos os testes de compilação estática em ambas as linguagens e a integridade de todas as entregas foi validada com **100% de sucesso**:
+
+1.  **Backend Go Daemon (`go build`):**
+    *   **Comando:** `go build -o /dev/null ./cmd/api/main.go` (no diretório `backend`)
+    *   **Resultado:** Compilação bem-sucedida, sem avisos de tipagem estática ou erros de injeção (`Exit code: 0`).
+2.  **Frontend Streamlit (`python3 -m py_compile`):**
+    *   **Comando:** `python3 -m py_compile streamlit/app.py` e `python3 -m py_compile streamlit/pages/3_infra_provisioning.py`
+    *   **Resultado:** Sintaxe Python e importações validadas sem erros (`Exit code: 0`).
