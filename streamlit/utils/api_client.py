@@ -164,6 +164,30 @@ def heal_channels(guild_id, category_id):
     except Exception as e:
         return False, str(e)
 
+@st.cache_data(ttl=300)
+def get_provision_page_data(guild_id):
+    try:
+        resp = requests.get(f"{base_url}/ui/provision-page/{guild_id}", timeout=10.0)
+        return resp.json() if resp.status_code == 200 else None
+    except Exception:
+        return None
+
+def save_announcement_channel(guild_id, channel_id):
+    payload = {"announcement_channel_id": channel_id}
+    try:
+        resp = requests.patch(
+            f"{base_url}/config/guilds/{guild_id}",
+            json=payload,
+            timeout=5.0
+        )
+        if resp.status_code == 200:
+            get_provision_page_data.clear() # Purge BFF cache on successful save
+            return True, resp.json()
+        return False, f"Status: {resp.status_code}"
+    except Exception as e:
+        return False, str(e)
+
+
 def sync_advanced_to_db(unused_url=None, guild_id=None, payload=None):
     # Support both (unused_url, guild_id, payload) and (guild_id, payload) signatures
     gid = guild_id if guild_id is not None else unused_url

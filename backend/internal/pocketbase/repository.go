@@ -479,3 +479,79 @@ func (r *Repository) GetAttendancesByDateAndRole(guildID, roleID, targetDate str
 
 	return attendances, nil
 }
+
+// DeleteRecord deletes a single record from a collection by its PocketBase internal 15-character ID.
+func (r *Repository) DeleteRecord(collection string, pbID string) error {
+	endpoint := fmt.Sprintf("api/collections/%s/records/%s", collection, pbID)
+	resp, err := r.client.SendRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("failed to issue DELETE request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("pocketbase delete record failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
+}
+
+// FindBroadcastsByGuild searches PocketBase for all broadcasts in a specific guild, sorted by schedule_time descending.
+func (r *Repository) FindBroadcastsByGuild(guildID string) ([]BroadcastRecord, error) {
+	filter := fmt.Sprintf("guild_id='%s'", guildID)
+	endpoint := fmt.Sprintf("api/collections/broadcasts/records?filter=%s&sort=-schedule_time&limit=200", url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for broadcasts: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var broadcasts []BroadcastRecord
+	if err := json.Unmarshal(listResp.Items, &broadcasts); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal broadcasts array: %w", err)
+	}
+
+	return broadcasts, nil
+}
+
+// FindScheduledBroadcastsBefore searches PocketBase for all scheduled broadcasts with a schedule time <= cutoff.
+func (r *Repository) FindScheduledBroadcastsBefore(cutoff string) ([]BroadcastRecord, error) {
+	filter := fmt.Sprintf("status='scheduled' && schedule_time<='%s'", cutoff)
+	endpoint := fmt.Sprintf("api/collections/broadcasts/records?filter=%s&limit=200", url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for scheduled broadcasts: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var broadcasts []BroadcastRecord
+	if err := json.Unmarshal(listResp.Items, &broadcasts); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal broadcasts array: %w", err)
+	}
+
+	return broadcasts, nil
+}
+

@@ -263,3 +263,73 @@ func (u *ProvisionUsecase) HealChannelsByCategory(guildDiscordID string, categor
 	log.Printf("🏁 [HEAL] Auto-Healing run completed. Metrics: %+v", metrics)
 	return metrics, nil
 }
+
+// ProvisionPageMetrics holds metric configurations for the provision page BFF.
+type ProvisionPageMetrics struct {
+	TotalStudentsWithoutChannels int `json:"total_students_without_channels"`
+}
+
+// ProvisionPageData holds the aggregated data payload for the provision page BFF.
+type ProvisionPageData struct {
+	Categories            []discord.DiscordCategory `json:"categories"`
+	Roles                 []discord.SimpleEntity    `json:"roles"`
+	Metrics               ProvisionPageMetrics      `json:"metrics"`
+	AnnouncementChannelID string                    `json:"announcement_channel_id"`
+	TextChannels          []discord.DiscordChannel  `json:"text_channels"`
+}
+
+// GetProvisionPageData gathers and returns all categories, roles, text channels, and announcement channel configuration for a guild.
+func (u *ProvisionUsecase) GetProvisionPageData(guildDiscordID string) (ProvisionPageData, error) {
+	var data ProvisionPageData
+	data.Categories = []discord.DiscordCategory{}
+	data.Roles = []discord.SimpleEntity{}
+	data.TextChannels = []discord.DiscordChannel{}
+
+	// 1. Fetch categories from Discord
+	categories, err := u.DiscordService.GetGuildCategories(guildDiscordID)
+	if err != nil {
+		return data, fmt.Errorf("failed to fetch Discord categories: %w", err)
+	}
+	data.Categories = categories
+
+	// 2. Fetch roles from Discord
+	roles, err := u.DiscordService.GetGuildRoles(guildDiscordID)
+	if err != nil {
+		return data, fmt.Errorf("failed to fetch Discord roles: %w", err)
+	}
+	data.Roles = roles
+
+	// 3. Fetch text channels from Discord
+	textChannels, err := u.DiscordService.GetGuildTextChannels(guildDiscordID)
+	if err != nil {
+		return data, fmt.Errorf("failed to fetch Discord text channels: %w", err)
+	}
+	data.TextChannels = textChannels
+
+	// 4. Query local Guild Record for announcement channel
+	var guildRecord pocketbase.GuildRecord
+	found, err := u.PBRepository.FindFirstByDiscordID("guilds", guildDiscordID, &guildRecord)
+	if err != nil {
+		log.Printf("⚠️ Warning: Failed to query guild %s in database: %v", guildDiscordID, err)
+	}
+	if found {
+		data.AnnouncementChannelID = guildRecord.AnnouncementChannelID
+
+		// Count students without channels in PocketBase
+		students, err := u.PBRepository.FindStudentsByGuild(guildRecord.ID)
+		if err != nil {
+			log.Printf("⚠️ Warning: Failed to fetch students for guild %s: %v", guildRecord.ID, err)
+		} else {
+			count := 0
+			for _, student := range students {
+				if student.ChannelID == "" {
+					count++
+				}
+			}
+			data.Metrics.TotalStudentsWithoutChannels = count
+		}
+	}
+
+	return data, nil
+}
+

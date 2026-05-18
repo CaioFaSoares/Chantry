@@ -10,9 +10,10 @@ type PBRecord struct {
 // GuildRecord maps the "guilds" collection schema.
 type GuildRecord struct {
 	PBRecord
-	DiscordID string `json:"discord_id"`
-	Name      string `json:"name"`
-	Status    string `json:"status"` // select: active, archived
+	DiscordID             string `json:"discord_id"`
+	Name                  string `json:"name"`
+	Status                string `json:"status"` // select: active, archived
+	AnnouncementChannelID string `json:"announcement_channel_id"`
 }
 
 // RoleRecord maps the "roles" collection schema.
@@ -88,3 +89,17 @@ type ActivityRecord struct {
 	DueDate     string `json:"due_date"`    // date
 	Status      string `json:"status"`      // select: draft, published, archived
 }
+
+// BroadcastRecord maps the "broadcasts" collection schema.
+type BroadcastRecord struct {
+	PBRecord
+	Content       string   `json:"content"`
+	TargetType    string   `json:"target_type"`  // public, private
+	TargetRoles   []string `json:"target_roles"` // relation/json to roles (multiple)
+	Status        string   `json:"status"`       // scheduled, processing, completed, failed
+	ScheduleTime  string   `json:"schedule_time"`
+	GuildID       string   `json:"guild_id"`
+	MetricsSent   int      `json:"metrics_sent"`
+	MetricsErrors int      `json:"metrics_errors"`
+}
+

@@ -25,11 +25,27 @@ type SimpleMember struct {
 	Roles    []string `json:"roles"`
 }
 
+// Helpers seguros para logging
+func getChannelID(ch *discordgo.Channel) string {
+	if ch == nil {
+		return "nil"
+	}
+	return ch.ID
+}
+
+func getMessageID(m *discordgo.Message) string {
+	if m == nil {
+		return "nil"
+	}
+	return m.ID
+}
+
 // GetGuilds queries the Discord REST API to fetch all servers (Guilds)
 // where the bot is currently added and authorized.
 func (s *DiscordService) GetGuilds() ([]SimpleEntity, error) {
-	// Query user guilds, fetching up to 100 entries, using false for member/local count inclusion.
+	log.Printf("[DISCORD REST] Enviando GET /users/@me/guilds...")
 	res, err := s.Session.UserGuilds(100, "", "", false)
+	log.Printf("[DISCORD REST] GET /users/@me/guilds retornou %d guildas | Erro: %v", len(res), err)
 	if err != nil {
 		return nil, err
 	}
@@ -48,14 +64,15 @@ func (s *DiscordService) GetGuilds() ([]SimpleEntity, error) {
 // GetGuildRoles queries the Discord REST API to fetch all roles declared in a
 // specific server, filtering out the default implicit '@everyone' role.
 func (s *DiscordService) GetGuildRoles(guildID string) ([]SimpleEntity, error) {
+	log.Printf("[DISCORD REST] Enviando GET /guilds/%s/roles...", guildID)
 	res, err := s.Session.GuildRoles(guildID)
+	log.Printf("[DISCORD REST] GET /guilds/%s/roles retornou %d cargos | Erro: %v", guildID, len(res), err)
 	if err != nil {
 		return nil, err
 	}
 
 	roles := make([]SimpleEntity, 0)
 	for _, r := range res {
-		// Ignore the default everyone group role which represents the entire server membership base
 		if r.Name == "@everyone" {
 			continue
 		}
@@ -69,40 +86,44 @@ func (s *DiscordService) GetGuildRoles(guildID string) ([]SimpleEntity, error) {
 }
 
 // GetGuildMembersByRole fetches all server (Guild) members using cursor pagination,
-// returning only the users holding the specified roleID mapped to our SimpleMember DTO.
+// returning only the users holding the specified roleID. If roleID is empty, it returns all members.
 func (s *DiscordService) GetGuildMembersByRole(guildID, roleID string) ([]SimpleMember, error) {
 	filteredMembers := make([]SimpleMember, 0)
 	after := ""
 
+	log.Printf("[DISCORD REST] Iniciando busca paginada de membros da guilda: %s, filtro de cargo: %q", guildID, roleID)
+
 	for {
-		// Query members list page, max 1000 items starting after the given user ID.
+		log.Printf("[DISCORD REST] Enviando GET /guilds/%s/members (after=%q, limit=1000)...", guildID, after)
 		members, err := s.Session.GuildMembers(guildID, after, 1000)
+		log.Printf("[DISCORD REST] GET /guilds/%s/members retornou %d membros | Erro: %v", guildID, len(members), err)
 		if err != nil {
 			return nil, err
 		}
 
-		// Empty response means we've successfully iterated through the entire membership list.
 		if len(members) == 0 {
 			break
 		}
 
 		for _, m := range members {
-			// Skip users who have null profiles or empty credentials (defensive checks)
 			if m.User == nil {
 				continue
 			}
 
-			// Verify if the user possesses the target role ID
+			// Se roleID for vazio, aceitamos o membro. Caso contrário, checamos a presença do cargo.
 			hasRole := false
-			for _, r := range m.Roles {
-				if r == roleID {
-					hasRole = true
-					break
+			if roleID == "" {
+				hasRole = true
+			} else {
+				for _, r := range m.Roles {
+					if r == roleID {
+						hasRole = true
+						break
+					}
 				}
 			}
 
 			if hasRole {
-				// Hierarchical nickname resolution
 				nickname := m.Nick
 				if nickname == "" {
 					nickname = m.User.GlobalName
@@ -111,8 +132,7 @@ func (s *DiscordService) GetGuildMembersByRole(guildID, roleID string) ([]Simple
 					nickname = m.User.Username
 				}
 
-				log.Printf("[DEBUG-NICK] User: %s (%s) | Nick: %q | GlobalName: %q | ResolvedNickname: %q", 
-					m.User.Username, m.User.ID, m.Nick, m.User.GlobalName, nickname)
+				log.Printf("[DISCORD REST MEMBER MATCH] Membro localizado: %s (%s) | Roles: %v", m.User.Username, m.User.ID, m.Roles)
 
 				filteredMembers = append(filteredMembers, SimpleMember{
 					ID:       m.User.ID,
@@ -123,22 +143,22 @@ func (s *DiscordService) GetGuildMembersByRole(guildID, roleID string) ([]Simple
 			}
 		}
 
-		// If we fetched fewer items than the max limit of 1000, we've naturally reached the end
 		if len(members) < 1000 {
 			break
 		}
-
-		// Update the pagination cursor to start after the last processed user's ID
 		after = members[len(members)-1].User.ID
 	}
 
+	log.Printf("[DISCORD REST] Finalizada busca de membros. Total filtrado/retornado: %d", len(filteredMembers))
 	return filteredMembers, nil
 }
 
 // GetGuildCategories queries the Discord REST API to fetch all channels in a server,
 // filtering out any channels that are not categories and sorting the remaining list by Position in ascending order.
 func (s *DiscordService) GetGuildCategories(guildID string) ([]DiscordCategory, error) {
+	log.Printf("[DISCORD REST] Enviando GET /guilds/%s/channels (Categories)...", guildID)
 	channels, err := s.Session.GuildChannels(guildID)
+	log.Printf("[DISCORD REST] GET /guilds/%s/channels retornou %d canais | Erro: %v", guildID, len(channels), err)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +174,6 @@ func (s *DiscordService) GetGuildCategories(guildID string) ([]DiscordCategory, 
 		}
 	}
 
-	// Sort ascending by Position (0 is at the top)
 	sort.Slice(categories, func(i, j int) bool {
 		return categories[i].Position < categories[j].Position
 	})
@@ -170,7 +189,9 @@ func (s *DiscordService) CreateCategory(guildID string, name string, position in
 		Position: position,
 	}
 
+	log.Printf("[DISCORD REST] Enviando POST /guilds/%s/channels (Category name=%q)...", guildID, name)
 	ch, err := s.Session.GuildChannelCreateComplex(guildID, data)
+	log.Printf("[DISCORD REST] POST /guilds/%s/channels retornou ID: %s | Erro: %v", guildID, getChannelID(ch), err)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +217,6 @@ func sanitizeChannelName(name string) string {
 	}
 
 	res := result.String()
-	// Remove multiple consecutive hyphens
 	for strings.Contains(res, "--") {
 		res = strings.ReplaceAll(res, "--", "-")
 	}
@@ -213,13 +233,9 @@ func (s *DiscordService) CreatePrivateChannel(
 	studentName string,
 	managerDiscordIDs []string,
 ) (*DiscordChannel, error) {
-	// 1. Sanitize the channel name (e.g., 1-on-1-joaozinho)
 	channelName := "1-on-1-" + sanitizeChannelName(studentName)
-
-	// 2. Build permission overwrites slice
 	overwrites := make([]*discordgo.PermissionOverwrite, 0)
 
-	// A. Deny ViewChannel permission to @everyone role (Role ID is always identical to Guild ID)
 	overwrites = append(overwrites, &discordgo.PermissionOverwrite{
 		ID:    guildID,
 		Type:  discordgo.PermissionOverwriteTypeRole,
@@ -227,7 +243,6 @@ func (s *DiscordService) CreatePrivateChannel(
 		Deny:  discordgo.PermissionViewChannel,
 	})
 
-	// B. Allow ViewChannel, SendMessages and ReadMessageHistory to the target Student
 	overwrites = append(overwrites, &discordgo.PermissionOverwrite{
 		ID:   studentDiscordID,
 		Type: discordgo.PermissionOverwriteTypeMember,
@@ -237,7 +252,6 @@ func (s *DiscordService) CreatePrivateChannel(
 		Deny: 0,
 	})
 
-	// C. Allow ViewChannel, SendMessages, ReadMessageHistory and ManageMessages to all Guild Managers
 	for _, managerID := range managerDiscordIDs {
 		if managerID == "" {
 			continue
@@ -253,7 +267,6 @@ func (s *DiscordService) CreatePrivateChannel(
 		})
 	}
 
-	// 3. Assemble native discordgo structure
 	data := discordgo.GuildChannelCreateData{
 		Name:                 channelName,
 		Type:                 discordgo.ChannelTypeGuildText,
@@ -261,8 +274,9 @@ func (s *DiscordService) CreatePrivateChannel(
 		PermissionOverwrites: overwrites,
 	}
 
-	// 4. Issue the REST request to create the channel
+	log.Printf("[DISCORD REST] Enviando POST /guilds/%s/channels (Private Channel name=%q)...", guildID, channelName)
 	ch, err := s.Session.GuildChannelCreateComplex(guildID, data)
+	log.Printf("[DISCORD REST] POST /guilds/%s/channels retornou ID: %s | Erro: %v", guildID, getChannelID(ch), err)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create private channel on Discord: %w", err)
 	}
@@ -276,7 +290,8 @@ func (s *DiscordService) CreatePrivateChannel(
 
 // SendAttendanceButtons sends the interactive Check-In / Check-Out button prompt to a specific Discord channel.
 func (s *DiscordService) SendAttendanceButtons(channelID string) error {
-	_, err := s.Session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+	log.Printf("[DISCORD REST] Enviando POST /channels/%s/messages (Attendance Buttons)...", channelID)
+	resp, err := s.Session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
 		Content: "☀️ **Bom dia!** Está na hora de registrar a sua presença hoje.\nUse os botões abaixo para bater o seu ponto de entrada e de saída:",
 		Components: []discordgo.MessageComponent{
 			discordgo.ActionsRow{
@@ -301,12 +316,14 @@ func (s *DiscordService) SendAttendanceButtons(channelID string) error {
 			},
 		},
 	})
+	log.Printf("[DISCORD REST] POST /channels/%s/messages retornou mensagem ID: %s | Erro: %v", channelID, getMessageID(resp), err)
 	return err
 }
 
 // SendCheckoutPrompt sends the interactive Clock-Out button prompt to a specific Discord channel.
 func (s *DiscordService) SendCheckoutPrompt(channelID string) error {
-	_, err := s.Session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+	log.Printf("[DISCORD REST] Enviando POST /channels/%s/messages (Checkout Prompt)...", channelID)
+	resp, err := s.Session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
 		Content: "⏰ **O teu turno terminou!**\nPor favor, clica no botão abaixo para registar a saída:",
 		Components: []discordgo.MessageComponent{
 			discordgo.ActionsRow{
@@ -323,5 +340,31 @@ func (s *DiscordService) SendCheckoutPrompt(channelID string) error {
 			},
 		},
 	})
+	log.Printf("[DISCORD REST] POST /channels/%s/messages retornou mensagem ID: %s | Erro: %v", channelID, getMessageID(resp), err)
 	return err
 }
+
+// GetGuildTextChannels queries the Discord REST API to fetch all text channels in a server.
+func (s *DiscordService) GetGuildTextChannels(guildID string) ([]DiscordChannel, error) {
+	log.Printf("[DISCORD REST] Enviando GET /guilds/%s/channels (Text Channels)...", guildID)
+	channels, err := s.Session.GuildChannels(guildID)
+	log.Printf("[DISCORD REST] GET /guilds/%s/channels (Text) retornou %d canais | Erro: %v", guildID, len(channels), err)
+	if err != nil {
+		return nil, err
+	}
+
+	textChannels := make([]DiscordChannel, 0)
+	for _, ch := range channels {
+		if ch.Type == discordgo.ChannelTypeGuildText {
+			textChannels = append(textChannels, DiscordChannel{
+				ID:       ch.ID,
+				Name:     ch.Name,
+				ParentID: ch.ParentID,
+			})
+		}
+	}
+
+	return textChannels, nil
+}
+
+

@@ -66,7 +66,9 @@ from utils.api_client import (
     fetch_categories,
     create_category,
     provision_channels,
-    heal_channels
+    heal_channels,
+    get_provision_page_data,
+    save_announcement_channel
 )
 
 # 4. Session State Setup
@@ -115,8 +117,24 @@ else:
     if selected_guild:
         guild_id = selected_guild["id"]
         st.session_state.selected_guild_id = guild_id
-        roles = fetch_roles(guild_id)
         
+        # Load BFF aggregate page data
+        page_data = get_provision_page_data(guild_id)
+        if page_data is None:
+            st.error("❌ **Erro:** Não foi possível carregar os dados agregados da guilda do BFF.")
+            roles = []
+            categories = []
+            text_channels = []
+            announcement_channel_id = ""
+            total_students_without_channels = 0
+        else:
+            roles = page_data.get("roles", [])
+            categories = page_data.get("categories", [])
+            text_channels = page_data.get("text_channels", [])
+            announcement_channel_id = page_data.get("announcement_channel_id", "")
+            metrics = page_data.get("metrics", {})
+            total_students_without_channels = metrics.get("total_students_without_channels", 0)
+
         with col2:
             if not roles:
                 st.warning("⚠️ Nenhum cargo encontrado.")
@@ -124,6 +142,50 @@ else:
             else:
                 selected_role = st.selectbox("Selecione o Cargo (Turma)", options=roles, format_func=lambda r: r["name"])
         st.markdown("</div>", unsafe_allow_html=True)
+
+        # Show informational alert if students are pending private channel setup
+        if page_data and total_students_without_channels > 0:
+            st.info(f"💡 **Informação:** Existem **{total_students_without_channels}** alunos pendentes de provisionamento de canal nesta guilda.")
+
+        # 1.1 Announcement Channel configuration (Épico 6)
+        if page_data:
+            st.markdown("<div class='card-section'>", unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>📢 Canal Oficial de Comunicados</div>", unsafe_allow_html=True)
+            st.markdown("<p style='color: #94A3B8; font-size: 0.95rem; margin-top: -10px; margin-bottom: 15px;'>"
+                        "Selecione qual canal de texto funcionará como o megafone oficial para comunicados gerais da guilda.</p>",
+                        unsafe_allow_html=True)
+            
+            if not text_channels:
+                st.warning("⚠️ Nenhum canal de texto encontrado neste servidor.")
+            else:
+                # Find current index for pre-selection
+                default_chan_idx = 0
+                for idx, ch in enumerate(text_channels):
+                    if ch["id"] == announcement_channel_id:
+                        default_chan_idx = idx
+                        break
+                
+                col_chan_sel, col_chan_btn = st.columns([3, 1])
+                with col_chan_sel:
+                    selected_announcement_chan = st.selectbox(
+                        "Selecione o Canal de Avisos",
+                        options=text_channels,
+                        index=default_chan_idx,
+                        format_func=lambda c: f"#{c['name']} (ID: {c['id']})",
+                        key="announcement_channel_selectbox"
+                    )
+                with col_chan_btn:
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    if st.button("💾 Salvar Canal de Avisos", use_container_width=True):
+                        with st.spinner("Persistindo configuração..."):
+                            success, result = save_announcement_channel(guild_id, selected_announcement_chan["id"])
+                            if success:
+                                st.success("🎉 Canal de avisos atualizado com sucesso!")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"Erro ao salvar: {result}")
+            st.markdown("</div>", unsafe_allow_html=True)
 
         if selected_role:
             role_id = selected_role["id"]
@@ -141,7 +203,6 @@ else:
             category_id = None
             
             if cat_strategy == "📁 Usar Categoria Existente":
-                categories = fetch_categories(guild_id)
                 if not categories:
                     st.info("ℹ️ Nenhuma categoria encontrada no servidor Discord. Por favor, selecione 'Criar Nova Categoria' abaixo.")
                 else:
@@ -231,7 +292,6 @@ else:
                            "físicos no Discord ainda existam. O Chantry fará uma varredura na categoria selecionada, "
                            "mapeará os canais de volta aos alunos baseado no username e atualizará o banco de dados automaticamente.")
                 
-                categories = fetch_categories(guild_id)
                 if not categories:
                     st.info("ℹ️ Nenhuma categoria encontrada no servidor Discord.")
                 else:

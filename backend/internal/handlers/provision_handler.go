@@ -106,3 +106,24 @@ func (h *ProvisionHandler) HandleHealChannels(c *fiber.Ctx) error {
 		"metrics": metrics,
 	})
 }
+
+// HandleGetProvisionPageData handles GET /api/ui/provision-page/:guildId, returning the aggregated data for the page.
+func (h *ProvisionHandler) HandleGetProvisionPageData(c *fiber.Ctx) error {
+	guildID := c.Params("guildId")
+	if guildID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "The guildId path parameter is required in the route",
+		})
+	}
+
+	data, err := h.provisionUsecase.GetProvisionPageData(guildID)
+	if err != nil {
+		log.Printf("❌ ERROR [HandleGetProvisionPageData] for Guild ID %s: %v", guildID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(data)
+}
+

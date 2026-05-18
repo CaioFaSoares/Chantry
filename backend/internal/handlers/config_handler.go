@@ -129,3 +129,59 @@ func (h *ConfigHandler) HandleUpdateRoleConfig(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(updated)
 }
+
+// UpdateGuildConfigRequest maps the incoming request body for PATCH /api/config/guilds/:guildId
+type UpdateGuildConfigRequest struct {
+	AnnouncementChannelID string `json:"announcement_channel_id"`
+}
+
+// HandleUpdateGuildConfig updates the guild configuration in PocketBase (such as the announcement channel).
+func (h *ConfigHandler) HandleUpdateGuildConfig(c *fiber.Ctx) error {
+	guildDiscordID := c.Params("guildId")
+	if guildDiscordID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "The guildId path parameter is required in the route",
+		})
+	}
+
+	var req UpdateGuildConfigRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body format",
+		})
+	}
+
+	// 1. Resolve Discord Guild ID to PocketBase Guild Record
+	var guild pocketbase.GuildRecord
+	found, err := h.repo.FindFirstByDiscordID("guilds", guildDiscordID, &guild)
+	if err != nil {
+		log.Printf("❌ ERROR [UpdateGuildConfig] resolving Guild %s: %v", guildDiscordID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to resolve Guild: " + err.Error(),
+		})
+	}
+	if !found {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Guild not found in local database mapping",
+		})
+	}
+
+	// 2. Perform partial update (PATCH) of announcement channel ID
+	updateData := map[string]interface{}{
+		"announcement_channel_id": req.AnnouncementChannelID,
+	}
+
+	var updated pocketbase.GuildRecord
+	if err := h.repo.UpdateRecord("guilds", guild.ID, &updateData, &updated); err != nil {
+		log.Printf("❌ ERROR [UpdateGuildConfig] updating Guild ID %s: %v", guild.ID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update guild configuration in PocketBase: " + err.Error(),
+		})
+	}
+
+	log.Printf("✅ CONFIG: Updated Guild Announcement Channel for %s (%s): %s",
+		updated.Name, updated.DiscordID, updated.AnnouncementChannelID)
+
+	return c.Status(fiber.StatusOK).JSON(updated)
+}
+
