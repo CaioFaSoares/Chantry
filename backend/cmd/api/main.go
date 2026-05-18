@@ -7,6 +7,7 @@ import (
 
 	"chantry/backend/internal/config"
 	"chantry/backend/internal/discord"
+	"chantry/backend/internal/handlers"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -21,11 +22,14 @@ func main() {
 	}
 
 	// 2. Initialize Discord Client Service
-	_, err = discord.NewDiscordService(cfg.DiscordBotToken)
+	discordService, err := discord.NewDiscordService(cfg.DiscordBotToken)
 	if err != nil {
 		log.Fatalf("❌ FATAL: Erro ao inicializar o cliente Discord: %v", err)
 	}
 	log.Println("✅ Cliente Discord inicializado com sucesso")
+
+	// 3. Initialize HTTP handlers/controllers
+	discordHandler := handlers.NewDiscordHandler(discordService)
 
 	// Initialize Fiber App with dynamic configuration
 	app := fiber.New(fiber.Config{
@@ -49,6 +53,11 @@ func main() {
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
 	})
+
+	// Discord Integration Endpoints (REST API Proxy)
+	api := app.Group("/api")
+	api.Get("/discord/guilds", discordHandler.HandleGetGuilds)
+	api.Get("/discord/guilds/:guildId/roles", discordHandler.HandleGetGuildRoles)
 
 	// Get port from environment or fallback to 12000
 	port := os.Getenv("PORT")
