@@ -72,6 +72,9 @@ func runFiberApp() {
 
 	discordHandler := handlers.NewDiscordHandler(discordService)
 
+	provisionUsecase := usecases.NewProvisionUsecase(discordService, pbRepo)
+	provisionHandler := handlers.NewProvisionHandler(provisionUsecase)
+
 	// Initialize Fiber App with dynamic configuration
 	app := fiber.New(fiber.Config{
 		AppName: "Chantry Go Daemon v0.1.0",
@@ -106,6 +109,9 @@ func runFiberApp() {
 	// Synchronization Route (Logical Upsert)
 	api.Post("/sync/guilds/:guildId/members", syncHandler.HandleSyncMembers)
 	api.Post("/sync/guilds/:guildId/advanced", syncHandler.HandleAdvancedSync)
+
+	// Provisioning Route (1-on-1 Private Channels Batch)
+	api.Post("/provision/guilds/:guildId/channels", provisionHandler.HandleProvisionChannels)
 
 	// Get port from environment or fallback to 12000
 	port := os.Getenv("PORT")

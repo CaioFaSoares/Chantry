@@ -196,3 +196,33 @@ func (r *Repository) FindManagersByGuild(guildID string) ([]ManagerRecord, error
 
 	return managers, nil
 }
+
+// FindStudentsPendingProvision searches for students in a specific guild and role who do not have a Discord channel provisioned yet.
+// It uses limit=200 to ensure all pending students of a typical class are retrieved in a single batch.
+func (r *Repository) FindStudentsPendingProvision(guildID string, roleID string) ([]StudentRecord, error) {
+	filter := fmt.Sprintf("guild_id='%s' && role_id='%s' && channel_id=''", guildID, roleID)
+	endpoint := fmt.Sprintf("api/collections/students/records?filter=%s&limit=200", url.QueryEscape(filter))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for pending students: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var students []StudentRecord
+	if err := json.Unmarshal(listResp.Items, &students); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal students array: %w", err)
+	}
+
+	return students, nil
+}

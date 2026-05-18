@@ -169,13 +169,12 @@ st.markdown("<h1 class='main-header'>Chantry Orchestration</h1>", unsafe_allow_h
 st.markdown("<p class='subtitle'>Console unificado para prototipagem de POCs e fluxos automatizados de dados</p>", unsafe_allow_html=True)
 
 # Check active statuses (checks internal Docker name first, then maps to local 12XXX safe ports)
-n8n_online = check_service_status("n8n", 5678) or check_service_status("localhost", 12678)
 pocketbase_online = check_service_status("pocketbase", 8090) or check_service_status("localhost", 12090)
 go_online = check_service_status("go-server", 12000) or check_service_status("localhost", 12000)
 streamlit_online = True # We are currently running it!
 
-# Status Cards Layout (Unified grid of 4 columns)
-col1, col2, col3, col4 = st.columns(4)
+# Status Cards Layout (Unified grid of 3 columns)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     badge_html = "<span class='badge badge-online'>Online</span>" if streamlit_online else "<span class='badge badge-offline'>Offline</span>"
@@ -191,20 +190,6 @@ with col1:
     """, unsafe_allow_html=True)
 
 with col2:
-    badge_html = "<span class='badge badge-online'>Online</span>" if n8n_online else "<span class='badge badge-offline'>Offline</span>"
-    action_btn = '<a href="http://localhost:12678" target="_blank" class="btn-action">Abrir Painel n8n</a>' if n8n_online else '<a href="http://localhost:12678" target="_blank" class="btn-secondary">Tentar Acessar</a>'
-    st.markdown(f"""
-    <div class='card'>
-        <div class='card-title'>⚙️ n8n Automation Engine {badge_html}</div>
-        <div class='card-desc'>
-            Orquestrador de fluxos de trabalho visuais baseado em nós. Útil para criação ágil de integrações, consumo de Webhooks e transformações de payloads.
-        </div>
-        <p style='color:#64748B; font-size:0.85rem; margin-bottom: 20px;'>Porta Host: <b>12678</b> | Persistência: <code>n8n_data</code> (SQLite)</p>
-        {action_btn}
-    </div>
-    """, unsafe_allow_html=True)
-
-with col3:
     badge_html = "<span class='badge badge-online'>Online</span>" if pocketbase_online else "<span class='badge badge-offline'>Offline</span>"
     action_btn = '<a href="http://localhost:12090/_/" target="_blank" class="btn-action">Abrir Painel Admin</a>' if pocketbase_online else '<a href="http://localhost:12090/_/" target="_blank" class="btn-secondary">Tentar Acessar</a>'
     st.markdown(f"""
@@ -218,7 +203,7 @@ with col3:
     </div>
     """, unsafe_allow_html=True)
 
-with col4:
+with col3:
     badge_html = "<span class='badge badge-online'>Online</span>" if go_online else "<span class='badge badge-offline'>Offline</span>"
     action_btn = '<a href="http://localhost:12000/api/health" target="_blank" class="btn-action">Abrir Healthcheck</a>' if go_online else '<a href="http://localhost:12000/api/health" target="_blank" class="btn-secondary">Tentar Acessar</a>'
     st.markdown(f"""
@@ -233,87 +218,3 @@ with col4:
     """, unsafe_allow_html=True)
 
 st.markdown("---")
-
-
-# POC Sandbox Section
-st.subheader("🌌 Sandbox de Integração: Streamlit ➡️ n8n")
-st.write("Valide suas rotas enviando payloads JSON de teste diretamente para as rotas de webhook de teste do n8n.")
-
-if not n8n_online:
-    st.warning("⚠️ **Nota:** Aparentemente o serviço n8n está inativo no momento. Inicialize o container do n8n para realizar envios de teste reais.")
-
-sandbox_col1, sandbox_col2 = st.columns([3, 2])
-
-with sandbox_col1:
-    webhook_url = st.text_input(
-        "URL do Webhook do n8n (Webhook Node - Test URL)",
-        value="http://localhost:12678/webhook-test/minha-poc-id",
-        placeholder="Cole a URL do webhook criada no n8n"
-    )
-    
-    default_json = {
-        "event": "poc_test_trigger",
-        "source": "streamlit_sandbox",
-        "payload": {
-            "usuario": "Developer Chantry",
-            "modulo": "Streamlit & n8n Core",
-            "mensagem": "POC conectada e testada com sucesso!"
-        }
-    }
-    
-    json_payload_str = st.text_area(
-        "Payload JSON a ser Enviado",
-        value=json.dumps(default_json, indent=2, ensure_ascii=False),
-        height=180
-    )
-
-    if st.button("🚀 Disparar Webhook para o n8n"):
-        try:
-            # Parse JSON to validate syntax
-            parsed_json = json.loads(json_payload_str)
-            
-            with st.spinner("Enviando requisição..."):
-                response = requests.post(
-                    webhook_url,
-                    json=parsed_json,
-                    headers={"Content-Type": "application/json"},
-                    timeout=5.0
-                )
-                
-            if response.status_code >= 200 and response.status_code < 300:
-                st.success(f"🎉 Sucesso! Código de Retorno: {response.status_code}")
-                st.json(response.text if response.text else '{"status": "sem dados de retorno"}')
-            else:
-                st.error(f"❌ Falha no Envio. Código de Retorno: {response.status_code}")
-                st.text(response.text)
-                
-        except json.JSONDecodeError as je:
-            st.error(f"❌ JSON Inválido: {str(je)}")
-        except requests.exceptions.ConnectionError:
-            st.error("❌ Erro de Conexão: Não foi possível conectar ao endpoint do n8n. O n8n está rodando? A URL está correta?")
-        except Exception as e:
-            st.error(f"❌ Ocorreu um erro inesperado: {str(e)}")
-
-with sandbox_col2:
-    st.markdown("##### 📝 Exemplo em Código Python")
-    st.write("Copie e use este trecho de código para disparar requisições para o n8n programaticamente:")
-    
-    python_snippet = f"""import requests
-import json
-
-url = "{webhook_url}"
-payload = {json_payload_str}
-
-try:
-    response = requests.post(
-        url, 
-        json=payload, 
-        headers={{"Content-Type": "application/json"}},
-        timeout=5.0
-    )
-    print(f"Status Code: {{response.status_code}}")
-    print(response.json())
-except Exception as e:
-    print(f"Erro ao disparar: {{e}}")
-"""
-    st.code(python_snippet, language="python")
