@@ -229,3 +229,40 @@ def trigger_test_attendance(guild_id, channel_id, tester_discord_id):
             return False, resp.json().get("error", f"Status: {resp.status_code}")
     except Exception as e:
         return False, str(e)
+
+# 5. Broadcast Operations
+@st.cache_data(ttl=15, show_spinner=False)  # Lightweight cache for Broadcast UI BFF
+def fetch_broadcast_page_data(guild_id):
+    try:
+        resp = requests.get(f"{base_url}/ui/broadcast-page/{guild_id}", timeout=10.0)
+        return resp.json() if resp.status_code == 200 else None
+    except Exception:
+        return None
+
+def schedule_broadcast(guild_id, content, target_type, target_roles, schedule_time):
+    payload = {
+        "guild_id": guild_id,
+        "content": content,
+        "target_type": target_type,
+        "target_roles": target_roles,
+        "schedule_time": schedule_time
+    }
+    try:
+        resp = requests.post(f"{base_url}/broadcasts", json=payload, timeout=5.0)
+        if resp.status_code == 201:
+            fetch_broadcast_page_data.clear()  # Purge BFF page data cache on success!
+            return True, resp.json()
+        return False, resp.json().get("error", f"Status: {resp.status_code}")
+    except Exception as e:
+        return False, str(e)
+
+def cancel_broadcast(broadcast_id):
+    try:
+        resp = requests.delete(f"{base_url}/broadcasts/{broadcast_id}", timeout=5.0)
+        if resp.status_code == 200:
+            fetch_broadcast_page_data.clear()  # Purge BFF page data cache on success!
+            return True, resp.json().get("message", "Sucesso")
+        return False, resp.json().get("error", f"Status: {resp.status_code}")
+    except Exception as e:
+        return False, str(e)
+

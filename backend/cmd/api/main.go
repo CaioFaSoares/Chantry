@@ -92,6 +92,10 @@ func runFiberApp() {
 	discord.RegisterInteractionHandlers(discordService.Session, attendanceUsecase)
 	log.Println("✅ Handlers de Interação do Discord registrados")
 
+	// Start background async Broadcast worker
+	cron.StartBroadcastWorker(pbRepo, discordService)
+
+
 	// Initialize Fiber App with dynamic configuration
 	app := fiber.New(fiber.Config{
 		AppName: "Chantry Go Daemon v0.1.0",
@@ -140,6 +144,10 @@ func runFiberApp() {
 
 	// Targeted Broadcast Route
 	api.Post("/broadcast/guilds/:guildId/send", broadcastHandler.HandleSendBroadcast)
+	api.Get("/ui/broadcast-page/:guildId", broadcastHandler.HandleGetBroadcastPageData)
+	api.Post("/broadcasts", broadcastHandler.HandleCreateBroadcast)
+	api.Delete("/broadcasts/:id", broadcastHandler.HandleCancelBroadcast)
+
 
 	// Configuration Routes (Schedules & Shifts)
 	api.Get("/config/guilds/:guildId/roles", configHandler.HandleGetGuildRolesConfig)

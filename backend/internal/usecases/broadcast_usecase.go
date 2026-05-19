@@ -94,8 +94,10 @@ func (u *BroadcastUsecase) SendBroadcast(guildDiscordID, content, targetType str
 
 		// Construir set de IDs do PocketBase válidos para o disparo
 		targetPBIDs := make(map[string]bool)
-		for _, disRoleID := range targetRoleIDs {
-			if pbID, ok := discordRoleToPBID[disRoleID]; ok {
+		for _, roleID := range targetRoleIDs {
+			if len(roleID) == 15 {
+				targetPBIDs[roleID] = true
+			} else if pbID, ok := discordRoleToPBID[roleID]; ok {
 				targetPBIDs[pbID] = true
 			}
 		}
@@ -144,3 +146,97 @@ func (u *BroadcastUsecase) SendBroadcast(guildDiscordID, content, targetType str
 
 	return metrics, nil
 }
+
+// BroadcastPageData encapsulates data returned to build the Broadcast Center page in high performance.
+type BroadcastPageData struct {
+	AnnouncementChannelID   string                       `json:"announcement_channel_id"`
+	AnnouncementChannelName string                       `json:"announcement_channel_name"`
+	Roles                   []pocketbase.RoleRecord      `json:"roles"`
+	Broadcasts              []pocketbase.BroadcastRecord `json:"broadcasts"`
+}
+
+// GetBroadcastPageData resolves and aggregates all information required by the Broadcast Center Streamlit UI in one roundtrip.
+func (u *BroadcastUsecase) GetBroadcastPageData(guildDiscordID string) (BroadcastPageData, error) {
+	var data BroadcastPageData
+	data.Roles = []pocketbase.RoleRecord{}
+	data.Broadcasts = []pocketbase.BroadcastRecord{}
+
+	// 1. Resolve Guild
+	var guild pocketbase.GuildRecord
+	found, err := u.pbRepo.FindFirstByDiscordID("guilds", guildDiscordID, &guild)
+	if err != nil {
+		return data, fmt.Errorf("failed to resolve guild: %w", err)
+	}
+	if !found {
+		return data, fmt.Errorf("guild %s not found in DB", guildDiscordID)
+	}
+
+	data.AnnouncementChannelID = guild.AnnouncementChannelID
+
+	// Resolve the announcement channel name
+	if guild.AnnouncementChannelID != "" {
+		channel, err := u.discordService.Session.Channel(guild.AnnouncementChannelID)
+		if err == nil && channel != nil {
+			data.AnnouncementChannelName = "#" + channel.Name
+		} else {
+			data.AnnouncementChannelName = "Canal Configurado (" + guild.AnnouncementChannelID + ")"
+		}
+	} else {
+		data.AnnouncementChannelName = "Não Configurado"
+	}
+
+	// 2. Fetch Guild Roles mapped in local DB
+	roles, err := u.pbRepo.FindRolesByGuild(guild.ID)
+	if err != nil {
+		return data, fmt.Errorf("failed to fetch mapped roles: %w", err)
+	}
+	data.Roles = roles
+
+	// 3. Fetch Broadcasts History sorted decrescendo
+	broadcasts, err := u.pbRepo.FindBroadcastsByGuild(guild.ID)
+	if err != nil {
+		return data, fmt.Errorf("failed to fetch broadcasts: %w", err)
+	}
+	data.Broadcasts = broadcasts
+
+	return data, nil
+}
+
+// CreateBroadcast provisions a new scheduled broadcast inside the PocketBase database.
+func (u *BroadcastUsecase) CreateBroadcast(record *pocketbase.BroadcastRecord) error {
+	record.Status = "scheduled"
+	record.MetricsSent = 0
+	record.MetricsErrors = 0
+
+	var created pocketbase.BroadcastRecord
+	err := u.pbRepo.CreateRecord("broadcasts", record, &created)
+	if err != nil {
+		return fmt.Errorf("failed to create broadcast: %w", err)
+	}
+	*record = created
+	return nil
+}
+
+// CancelBroadcast cancels (physically deletes) a scheduled broadcast if it hasn't started processing yet.
+func (u *BroadcastUsecase) CancelBroadcast(broadcastID string) error {
+	var record pocketbase.BroadcastRecord
+	found, err := u.pbRepo.FindByID("broadcasts", broadcastID, &record)
+	if err != nil {
+		return fmt.Errorf("failed to search broadcast: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("broadcast not found")
+	}
+
+	if record.Status != "scheduled" {
+		return fmt.Errorf("cannot cancel broadcast that is already '%s'", record.Status)
+	}
+
+	err = u.pbRepo.DeleteRecord("broadcasts", broadcastID)
+	if err != nil {
+		return fmt.Errorf("failed to delete broadcast record: %w", err)
+	}
+
+	return nil
+}
+
