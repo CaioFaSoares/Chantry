@@ -281,12 +281,12 @@ else:
                         if _delivery == "Enviar Agora":
                             scheduled_dt = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=10)
                         else:
-                            import pytz
+                            from zoneinfo import ZoneInfo
                             # Localize the naive datetime to the server timezone before converting to UTC
                             server_tz_str = get_server_timezone()
-                            local_tz = pytz.timezone(server_tz_str)
+                            local_tz = ZoneInfo(server_tz_str)
                             naive_dt = datetime.datetime.combine(_date, _time)
-                            local_dt = local_tz.localize(naive_dt)
+                            local_dt = naive_dt.replace(tzinfo=local_tz)
                             scheduled_dt = local_dt.astimezone(datetime.timezone.utc)
 
                         scheduled_str = scheduled_dt.strftime("%Y-%m-%d %H:%M:%S.000Z")
@@ -326,12 +326,12 @@ else:
             else:
                 for item in scheduled_items:
                     try:
-                        import pytz
+                        from zoneinfo import ZoneInfo
                         # Format is YYYY-MM-DD HH:mm:ss.SSSZ
                         dt_utc = datetime.datetime.strptime(item["schedule_time"], "%Y-%m-%d %H:%M:%S.000Z")
                         dt_utc = dt_utc.replace(tzinfo=datetime.timezone.utc)
                         server_tz_str = get_server_timezone()
-                        local_tz = pytz.timezone(server_tz_str)
+                        local_tz = ZoneInfo(server_tz_str)
                         dt_local = dt_utc.astimezone(local_tz)
                         local_time_str = dt_local.strftime("%d/%m/%Y às %H:%M")
                     except Exception:
@@ -372,6 +372,8 @@ else:
             if not history_items:
                 st.info("ℹ️ **Sem histórico:** Nenhuma mensagem foi enviada ou processada ainda.")
             else:
+                role_id_to_name = {r["id"]: r["name"] for r in roles}
+                
                 for item in history_items:
                     status = item.get("status")
                     if status == "processing":
@@ -381,16 +383,38 @@ else:
                     else:
                         status_badge = "<span class='badge-danger'>❌ FALHOU</span>"
 
-                    dest_badge = "Megafone Público" if item["target_type"] == "public" else "Mensagem Direta 1-on-1"
+                    # Parse Time
+                    try:
+                        from zoneinfo import ZoneInfo
+                        dt_utc = datetime.datetime.strptime(item["schedule_time"], "%Y-%m-%d %H:%M:%S.000Z")
+                        dt_utc = dt_utc.replace(tzinfo=datetime.timezone.utc)
+                        server_tz_str = get_server_timezone()
+                        local_tz = ZoneInfo(server_tz_str)
+                        dt_local = dt_utc.astimezone(local_tz)
+                        local_time_str = dt_local.strftime("%d/%m/%Y às %H:%M:%S")
+                    except Exception:
+                        local_time_str = item.get("schedule_time", "Data Desconhecida")
+
+                    # Parse Targets
+                    if item.get("target_type") == "public":
+                        dest_badge = "📢 Megafone Público (Aviso Geral)"
+                    else:
+                        t_roles = item.get("target_roles", [])
+                        if t_roles and len(t_roles) > 0:
+                            role_names = [role_id_to_name.get(rid, "Desconhecido") for rid in t_roles]
+                            dest_badge = f"🎯 DM Privada (Turmas: {', '.join(role_names)})"
+                        else:
+                            dest_badge = "🎯 DM Privada (Todos os Alunos)"
+
                     metrics_str = f"🚀 **{item.get('metrics_sent', 0)}** enviadas | ⚠️ **{item.get('metrics_errors', 0)}** erros"
 
                     with st.container():
                         st.markdown(
                             f"<div class='card-section' style='margin-bottom: 16px;'>"
                             f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>"
-                            f"{status_badge}"
-                            f"<span style='color: #64748B; font-size: 0.85rem;'>Destino: <strong>{dest_badge}</strong></span>"
+                            f"<div>{status_badge} <span style='color: #94A3B8; font-size: 0.85rem; margin-left: 8px;'>Disparado: <strong>{local_time_str}</strong></span></div>"
                             f"</div>"
+                            f"<div style='color: #64748B; font-size: 0.9rem; margin-bottom: 4px;'>Alvo: <strong>{dest_badge}</strong></div>"
                             f"<div style='color: #94A3B8; font-size: 0.9rem; margin-bottom: 12px;'>Métricas: {metrics_str}</div>"
                             f"<p style='color: #CBD5E1; white-space: pre-wrap; font-size: 0.9rem; background: rgba(0, 0, 0, 0.15); padding: 12px; border-radius: 8px;'>{item['content']}</p>"
                             f"</div>",
