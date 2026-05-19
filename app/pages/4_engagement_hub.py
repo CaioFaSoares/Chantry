@@ -1,17 +1,10 @@
 import streamlit as st
 import datetime
 import time
-from utils.api_client import (
-    fetch_guilds,
-    fetch_broadcast_page_data,
-    schedule_broadcast,
-    cancel_broadcast,
-    get_server_timezone
-)
 
 # 1. Page Config
 st.set_page_config(
-    page_title="Central de Megafone & Mensagens - Chantry",
+    page_title="Hub de Engajamento - Chantry",
     page_icon="📢",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -110,7 +103,15 @@ html, body, [class*="css"], .stMarkdown, .stButton button {
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# 3. Initialize Session State for drafts and clones
+from utils.api_client import (
+    fetch_guilds,
+    fetch_broadcast_page_data,
+    schedule_broadcast,
+    cancel_broadcast,
+    get_server_timezone
+)
+
+# Initialize Session State for drafts and clones
 if "draft_content" not in st.session_state:
     st.session_state.draft_content = ""
 if "draft_target_type" not in st.session_state:
@@ -120,34 +121,57 @@ if "draft_target_roles" not in st.session_state:
 if "selected_guild_id" not in st.session_state:
     st.session_state.selected_guild_id = None
 
-# Sidebar
-st.sidebar.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80", width=True)
-st.sidebar.markdown("<h2 style='text-align: center;'>Chantry Suite</h2>", unsafe_allow_html=True)
-st.sidebar.markdown("---")
-
 # Title
-st.markdown("<h1 class='main-header'>📢 Central de Megafone & Mensagens</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>Orquestre e agende comunicados gerais ou DMs privadas direcionadas para seus alunos no Discord</p>", unsafe_allow_html=True)
+st.markdown("<h1 class='main-header'>📢 Hub de Engajamento</h1>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>Comunicação, Megafone, mensageria direta e calendário da sua guilda Discord</p>", unsafe_allow_html=True)
 
-# 4. Fetch Guilds
+# Fetch Guilds list
 guilds = fetch_guilds()
 if guilds is None:
     st.error("❌ **Erro de Conexão:** Não foi possível conectar ao Go Server Daemon na porta 12000.")
-elif not guilds:
-    st.warning("⚠️ **Sem Servidores:** O bot não está presente em nenhuma guilda autorizada.")
-else:
-    # Main Area Guild Selector
-    guild_options = {g["name"]: g["id"] for g in guilds}
-    selected_name = st.selectbox(
-        "Selecione o Servidor",
-        options=list(guild_options.keys()),
-        index=0
-    )
-    guild_discord_id = guild_options[selected_name]
-    st.session_state.selected_guild_id = guild_discord_id
+    st.stop()
 
+if not guilds:
+    st.warning("⚠️ **Sem Servidores:** O bot não está presente em nenhuma guilda autorizada.")
+    st.stop()
+
+# 3. Context Selector in Main Area
+st.markdown("<div class='card-section'>", unsafe_allow_html=True)
+st.markdown("<div class='section-title'>🔌 Seleção do Servidor de Engajamento</div>", unsafe_allow_html=True)
+
+guild_options = {g["id"]: g["name"] for g in guilds}
+default_index = 0
+if st.session_state.selected_guild_id and st.session_state.selected_guild_id in guild_options:
+    default_index = list(guild_options.keys()).index(st.session_state.selected_guild_id)
+
+selected_guild_id = st.selectbox(
+    "Escolha o Servidor Discord para engajamento:",
+    options=list(guild_options.keys()),
+    index=default_index,
+    format_func=lambda x: guild_options[x],
+    key="global_engagement_guild_selector"
+)
+st.session_state.selected_guild_id = selected_guild_id
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# Sidebar
+st.sidebar.markdown("### 🛠️ Controles de Atualização")
+if st.sidebar.button("🔄 Atualizar Hub", use_container_width=True):
+    st.rerun()
+
+# Set up Tabbed Interface
+tab_broadcast, tab_calendar = st.tabs([
+    "📣 Central de Mensagens (Megafone)", 
+    "📅 Calendário de Aulas"
+])
+
+# ==========================================
+# TAB 1: Central de Mensagens (Megafone)
+# ==========================================
+with tab_broadcast:
     # Fetch Aggregated BFF Page Data
-    page_data = fetch_broadcast_page_data(guild_discord_id)
+    page_data = fetch_broadcast_page_data(selected_guild_id)
 
     if not page_data:
         st.error("❌ **Erro de Dados:** Não foi possível carregar as informações desta guilda.")
@@ -168,17 +192,18 @@ else:
             unsafe_allow_html=True
         )
 
-        # Tab Selection Setup
-        tabs = st.tabs(["📝 Compor & Agendar", "⏳ Agendados", "📜 Histórico de Disparos"])
+        # Sub-navigation using st.radio to avoid nested tabs styling issues
+        sub_tab = st.radio(
+            "Selecione a Ação da Central de Mensagens:",
+            options=["📝 Compor & Agendar", "⏳ Agendados", "📜 Histórico de Disparos"],
+            horizontal=True,
+            key="engagement_sub_navigation"
+        )
 
-        # =========================================================================
-        # TAB 1: COMPOSITION
-        # Reactive controls (destination, delivery type, roles, date/time) are
-        # rendered OUTSIDE st.form so that Streamlit re-renders them immediately
-        # when the user changes a value. The form only holds the message textarea
-        # and the submit button.
-        # =========================================================================
-        with tabs[0]:
+        # ----------------------------------------------------
+        # SUB-TAB 1: Compor & Agendar
+        # ----------------------------------------------------
+        if sub_tab == "📝 Compor & Agendar":
             st.markdown("<h3 class='section-title'>📝 Criar Novo Comunicado</h3>", unsafe_allow_html=True)
 
             dest_options = [
@@ -191,7 +216,7 @@ else:
             if st.session_state.draft_target_type == "private":
                 default_dest_idx = 2 if len(st.session_state.draft_target_roles) > 0 else 1
 
-            # --- Reactive widget 1: Destination ---
+            # Destination
             selected_destination = st.selectbox(
                 "🎯 Destino do Comunicado",
                 options=dest_options,
@@ -199,7 +224,7 @@ else:
                 key="compose_destination"
             )
 
-            # --- Reactive widget 2: Role multiselect (only when filtering by role) ---
+            # Role multiselect
             role_options = {r["name"]: r["id"] for r in roles}
             selected_role_names = []
             if selected_destination == "Mensagem Direta (Canais 1-on-1) - Filtrar por Cargos":
@@ -216,7 +241,7 @@ else:
 
             st.markdown("---")
 
-            # --- Reactive widget 3: Delivery type ---
+            # Delivery type
             delivery_type = st.radio(
                 "⏱️ Tipo de Envio",
                 options=["Enviar Agora", "Agendar Envio"],
@@ -225,7 +250,6 @@ else:
                 key="compose_delivery_type"
             )
 
-            # --- Reactive widgets 4 & 5: Date / Time (disabled when Enviar Agora) ---
             is_immediate = (delivery_type == "Enviar Agora")
             col_date, col_time = st.columns(2)
             with col_date:
@@ -245,7 +269,7 @@ else:
                     key="compose_time"
                 )
 
-            # --- Form: only message content + submit ---
+            # Form
             with st.form("broadcast_form", clear_on_submit=True):
                 content = st.text_area(
                     "✉️ Conteúdo da Mensagem",
@@ -258,18 +282,16 @@ else:
                 submitted = st.form_submit_button(submit_label, use_container_width=True, type="primary")
 
                 if submitted:
-                    # Read reactive state values captured before form submission
                     _destination = st.session_state.get("compose_destination", dest_options[0])
                     _delivery = st.session_state.get("compose_delivery_type", "Enviar Agora")
                     _roles = st.session_state.get("compose_roles", [])
                     _date = st.session_state.get("compose_date", datetime.date.today())
                     _time = st.session_state.get("compose_time", datetime.time(12, 0))
 
-                    # Validation
                     if not content.strip():
                         st.error("❌ **Erro:** O conteúdo do comunicado não pode ser vazio.")
                     elif _destination == "Aviso Geral (Canal de Avisos)" and not announcement_channel_id:
-                        st.error("❌ **Erro:** Canal de avisos não configurado. Acesse a aba de Infraestrutura para configurar.")
+                        st.error("❌ **Erro:** Canal de avisos não configurado na aba de Infraestrutura (Setup).")
                     elif _destination == "Mensagem Direta (Canais 1-on-1) - Filtrar por Cargos" and not _roles:
                         st.error("❌ **Erro:** Selecione ao menos um cargo alvo para entrega filtrada.")
                     else:
@@ -282,7 +304,6 @@ else:
                             scheduled_dt = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=10)
                         else:
                             from zoneinfo import ZoneInfo
-                            # Localize the naive datetime to the server timezone before converting to UTC
                             server_tz_str = get_server_timezone()
                             local_tz = ZoneInfo(server_tz_str)
                             naive_dt = datetime.datetime.combine(_date, _time)
@@ -291,7 +312,7 @@ else:
 
                         scheduled_str = scheduled_dt.strftime("%Y-%m-%d %H:%M:%S.000Z")
 
-                        with st.spinner("Persistindo agendamento no banco de dados..."):
+                        with st.spinner("Persistindo agendamento no banco..."):
                             success, result = schedule_broadcast(
                                 guild_id=page_data.get("guild_pb_id", ""),
                                 content=content,
@@ -309,16 +330,15 @@ else:
                             else:
                                 st.error(f"❌ **Erro no Backend:** {result}")
 
-        # =========================================================================
-        # TAB 2: SCHEDULED BROADCASTS
-        # =========================================================================
-        with tabs[1]:
+        # ----------------------------------------------------
+        # SUB-TAB 2: Agendados
+        # ----------------------------------------------------
+        elif sub_tab == "⏳ Agendados":
             col_t1, col_t2 = st.columns([0.8, 0.2])
             col_t1.markdown("<h3 class='section-title'>⏳ Comunicados Agendados</h3>", unsafe_allow_html=True)
             if col_t2.button("🔄 Atualizar Lista", use_container_width=True):
-                fetch_broadcast_page_data.clear()
                 st.rerun()
-                
+
             scheduled_items = [b for b in broadcasts if b.get("status") == "scheduled"]
 
             if not scheduled_items:
@@ -327,7 +347,6 @@ else:
                 for item in scheduled_items:
                     try:
                         from zoneinfo import ZoneInfo
-                        # Format is YYYY-MM-DD HH:mm:ss.SSSZ
                         dt_utc = datetime.datetime.strptime(item["schedule_time"], "%Y-%m-%d %H:%M:%S.000Z")
                         dt_utc = dt_utc.replace(tzinfo=datetime.timezone.utc)
                         server_tz_str = get_server_timezone()
@@ -362,10 +381,10 @@ else:
                                 else:
                                     st.error(f"Erro ao cancelar: {message}")
 
-        # =========================================================================
-        # TAB 3: HISTORY
-        # =========================================================================
-        with tabs[2]:
+        # ----------------------------------------------------
+        # SUB-TAB 3: Histórico de Disparos
+        # ----------------------------------------------------
+        elif sub_tab == "📜 Histórico de Disparos":
             st.markdown("<h3 class='section-title'>📜 Histórico de Envios</h3>", unsafe_allow_html=True)
             history_items = [b for b in broadcasts if b.get("status") in ["processing", "completed", "failed"]]
 
@@ -373,7 +392,7 @@ else:
                 st.info("ℹ️ **Sem histórico:** Nenhuma mensagem foi enviada ou processada ainda.")
             else:
                 role_id_to_name = {r["id"]: r["name"] for r in roles}
-                
+
                 for item in history_items:
                     status = item.get("status")
                     if status == "processing":
@@ -383,7 +402,6 @@ else:
                     else:
                         status_badge = "<span class='badge-danger'>❌ FALHOU</span>"
 
-                    # Parse Time
                     try:
                         from zoneinfo import ZoneInfo
                         dt_utc = datetime.datetime.strptime(item["schedule_time"], "%Y-%m-%d %H:%M:%S.000Z")
@@ -395,7 +413,6 @@ else:
                     except Exception:
                         local_time_str = item.get("schedule_time", "Data Desconhecida")
 
-                    # Parse Targets
                     if item.get("target_type") == "public":
                         dest_badge = "📢 Megafone Público (Aviso Geral)"
                     else:
@@ -425,6 +442,19 @@ else:
                             st.session_state.draft_content = item["content"]
                             st.session_state.draft_target_type = item["target_type"]
                             st.session_state.draft_target_roles = item.get("target_roles", [])
-                            st.success("📝 **Comunicado Clonado!** O conteúdo foi carregado na aba 'Compor & Agendar'.")
+                            st.success("📝 **Comunicado Clonado!** O conteúdo foi carregado na ação 'Compor & Agendar'.")
                             time.sleep(1.0)
                             st.rerun()
+
+
+# ==========================================
+# TAB 2: Calendário de Aulas (Placeholder)
+# ==========================================
+with tab_calendar:
+    st.markdown("### 📅 Calendário de Aulas e Mentorias")
+    st.markdown("<p style='color: #94A3B8; font-size: 0.95rem; margin-top:-10px; margin-bottom: 20px;'>"
+                "Gerenciamento de eventos escolares integrados ao Discord.</p>",
+                unsafe_allow_html=True)
+    
+    st.info("🚧 **Em construção:** O Motor de Calendário e Encontros chegará em breve! "
+            "Aqui você poderá agendar aulas e mentorias, notificando turmas ou alunos específicos diretamente no Discord.")

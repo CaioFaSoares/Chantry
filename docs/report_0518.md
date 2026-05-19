@@ -182,6 +182,30 @@ Toda a configuração está contida no arquivo unificado `2_server_setup.py`:
 
 ---
 
+## 📦 Épico R.3: Consolidação da Operação (Comunicação e Relatórios)
+
+Unificamos a gestão de dados operacionais e de engajamento do Chantry em dois painéis principais, reduzindo a complexidade cognitiva da interface.
+
+### 🧹 Limpeza de Arquivos Legados
+Ficheiros independentes excluídos da pasta `app/pages/`:
+- `5_attendance_dashboard.py` (antigo painel diário)
+- `6_broadcast_center.py` (antigo megafone/comunicados)
+- `7_reports_export.py` (antigo exportador BI)
+
+### 📊 3. Centro de Inteligência e Relatórios (`3_intelligence_center.py`)
+Agrupa sob abas:
+1. **Visão Diária (Ponto)**: Roster de presenças do dia, indicadores rápidos (Total, Completos, Em Andamento, Atrasados e Faltas).
+2. **Visão Histórica & Exportação**: Filtro por período de datas e cargo Discord, métricas BI acumuladas e exportação direta e segura de arquivos CSV de frequência.
+
+### 📢 4. Hub de Engajamento (`4_engagement_hub.py`)
+Agrupa sob abas:
+1. **Central de Mensagens (Megafone)**: Composição de comunicados públicos ou privados via DMs 1-on-1 para os alunos com sub-navegação em `st.radio` (Compor, Agendados e Histórico).
+2. **Calendário de Aulas**: Placeholder com informações sobre o motor de calendário a ser desenvolvido no próximo épico.
+
+Ambos os hubs compartilham a seleção global do servidor no topo da página principal via `st.session_state["selected_guild_id"]`.
+
+---
+
 ## 🚀 Status da Compilação e Validações
 
 Realizamos os testes de compilação estática em ambas as linguagens e a integridade de todas as entregas foi validada com **100% de sucesso**:
@@ -190,6 +214,7 @@ Realizamos os testes de compilação estática em ambas as linguagens e a integr
     *   **Comando:** `go build -o /dev/null ./cmd/api/main.go` (no diretório `server`)
     *   **Resultado:** Compilação bem-sucedida, sem erros de tipagem estática ou injeção (`Exit code: 0`).
 2.  **Frontend App (`python3 -m py_compile`):**
-    *   **Comando:** `python3 -m py_compile app/pages/2_server_setup.py`
+    *   **Comando:** `python3 -m py_compile app/pages/2_server_setup.py app/pages/3_intelligence_center.py app/pages/4_engagement_hub.py`
     *   **Resultado:** Sintaxe Python e importações validadas sem erros (`Exit code: 0`).
+
 
