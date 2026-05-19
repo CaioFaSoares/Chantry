@@ -149,6 +149,7 @@ func (u *BroadcastUsecase) SendBroadcast(guildDiscordID, content, targetType str
 
 // BroadcastPageData encapsulates data returned to build the Broadcast Center page in high performance.
 type BroadcastPageData struct {
+	GuildID                 string                       `json:"guild_pb_id"`
 	AnnouncementChannelID   string                       `json:"announcement_channel_id"`
 	AnnouncementChannelName string                       `json:"announcement_channel_name"`
 	Roles                   []pocketbase.RoleRecord      `json:"roles"`
@@ -171,7 +172,9 @@ func (u *BroadcastUsecase) GetBroadcastPageData(guildDiscordID string) (Broadcas
 		return data, fmt.Errorf("guild %s not found in DB", guildDiscordID)
 	}
 
+	data.GuildID = guild.ID
 	data.AnnouncementChannelID = guild.AnnouncementChannelID
+
 
 	// Resolve the announcement channel name
 	if guild.AnnouncementChannelID != "" {

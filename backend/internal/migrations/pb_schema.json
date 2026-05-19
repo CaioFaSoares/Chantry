@@ -654,29 +654,26 @@
         "system": false,
         "id": "fld_broad_target_type",
         "name": "target_type",
-        "type": "select",
+        "type": "text",
         "required": true,
         "presentable": false,
         "unique": false,
         "options": {
-          "maxSelect": 1,
-          "values": ["public", "private"]
+          "min": null,
+          "max": null,
+          "pattern": ""
         }
       },
       {
         "system": false,
         "id": "fld_broad_target_roles",
         "name": "target_roles",
-        "type": "relation",
+        "type": "json",
         "required": false,
         "presentable": false,
         "unique": false,
         "options": {
-          "collectionId": "col_roles123456",
-          "cascadeDelete": false,
-          "minSelect": null,
-          "maxSelect": null,
-          "displayFields": null
+          "maxSize": 2000000
         }
       },
       {

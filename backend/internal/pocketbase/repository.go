@@ -146,6 +146,7 @@ func (r *Repository) CreateRecord(collection string, data interface{}, dest inte
 }
 
 // UpdateRecord performs a partial update (PATCH) of an existing record using its unique 15-character PocketBase internal ID.
+// If dest is nil, the response body is discarded (fire-and-forget update).
 func (r *Repository) UpdateRecord(collection string, pbID string, data interface{}, dest interface{}) error {
 	endpoint := fmt.Sprintf("api/collections/%s/records/%s", collection, pbID)
 	resp, err := r.client.SendRequest("PATCH", endpoint, data)
@@ -159,8 +160,11 @@ func (r *Repository) UpdateRecord(collection string, pbID string, data interface
 		return fmt.Errorf("pocketbase update record failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
-		return fmt.Errorf("failed to decode updated record: %w", err)
+	// Only decode the response body if the caller wants to capture the updated record.
+	if dest != nil {
+		if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+			return fmt.Errorf("failed to decode updated record: %w", err)
+		}
 	}
 
 	return nil

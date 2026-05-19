@@ -94,9 +94,9 @@ type ActivityRecord struct {
 type BroadcastRecord struct {
 	PBRecord
 	Content       string   `json:"content"`
-	TargetType    string   `json:"target_type"`  // public, private
-	TargetRoles   []string `json:"target_roles"` // relation/json to roles (multiple)
-	Status        string   `json:"status"`       // scheduled, processing, completed, failed
+	TargetType    string   `json:"target_type"`  // text: "public" or "private" (validated in handler, not in DB)
+	TargetRoles   []string `json:"target_roles"` // json array of PocketBase role IDs
+	Status        string   `json:"status"`       // text: scheduled, processing, completed, failed
 	ScheduleTime  string   `json:"schedule_time"`
 	GuildID       string   `json:"guild_id"`
 	MetricsSent   int      `json:"metrics_sent"`

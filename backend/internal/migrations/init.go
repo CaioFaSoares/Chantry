@@ -78,8 +78,9 @@ func init() {
 			}
 		}
 		
-		// 5. Import all collections (deleteMissing = true is now safe, keeping 'users' intact)
-		err = dao.ImportCollections(collections, true, nil)
+		// 5. Import all collections without deleting collections not present in the JSON schema.
+		// broadcasts is managed by a separate raw SQL migration (2_fix_broadcasts_schema.go).
+		err = dao.ImportCollections(collections, false, nil)
 		if err != nil {
 			log.Printf("❌ [Migration] Failed to import collections: %v", err)
 			return err
