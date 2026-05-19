@@ -1,0 +1,52 @@
+services:
+  chantry-frontend:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: chantry_streamlit
+    expose:
+      - "8501"
+    volumes:
+      - ./app:/app
+    environment:
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    restart: unless-stopped
+    depends_on:
+      - chantry-go-server
+
+  chantry-pocketbase:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: chantry_pocketbase
+    expose:
+      - "8090"
+    volumes:
+      - ./db:/db
+    environment:
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
+    restart: unless-stopped
+    command: [ "./main", "serve", "--http=0.0.0.0:8090", "--dir=/db" ]
+
+  chantry-go-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: chantry_go_server
+    expose:
+      - "12000"
+    environment:
+      - PORT=12000
+      - POCKETBASE_URL=http://chantry-pocketbase:8090
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
+      - DISCORD_APP_ID=${DISCORD_APP_ID}
+      - DISCORD_PUBLIC_KEY=${DISCORD_PUBLIC_KEY}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - TIMEZONE=${TIMEZONE:-America/Sao_Paulo}
+    restart: unless-stopped
+    depends_on:
+      - chantry-pocketbase
