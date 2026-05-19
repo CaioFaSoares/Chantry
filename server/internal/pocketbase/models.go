@@ -27,6 +27,7 @@ type RoleRecord struct {
 	CheckoutCooldown int    `json:"checkout_cooldown"`
 	IsMonitored      bool   `json:"is_monitored"`
 	IsActive         bool   `json:"is_active"`
+	SquadChannelID   string `json:"squad_channel_id"` // NOVO
 }
 
 // StudentRecord maps the "students" collection schema.

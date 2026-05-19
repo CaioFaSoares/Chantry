@@ -185,3 +185,42 @@ func (h *ConfigHandler) HandleUpdateGuildConfig(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(updated)
 }
 
+
+// UpdateSquadChannelRequest represents the payload to update a role's squad_channel_id
+type UpdateSquadChannelRequest struct {
+	SquadChannelID string `json:"squad_channel_id"`
+}
+
+// HandleUpdateSquadChannel updates only the squad_channel_id for a specific role
+func (h *ConfigHandler) HandleUpdateSquadChannel(c *fiber.Ctx) error {
+	roleID := c.Params("roleId")
+	if roleID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "The roleId parameter is required",
+		})
+	}
+
+	var req UpdateSquadChannelRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid JSON body format",
+		})
+	}
+
+	payload := map[string]interface{}{
+		"squad_channel_id": req.SquadChannelID,
+	}
+
+	err := h.repo.UpdateRecord("roles", roleID, payload, nil)
+	if err != nil {
+		log.Printf("❌ ERROR [UpdateSquadChannel] for Role ID %s: %v", roleID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update squad channel in database",
+		})
+	}
+
+	log.Printf("✅ [ConfigHandler] Squad channel for Role ID %s successfully updated", roleID)
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Squad channel updated successfully",
+	})
+}

@@ -88,6 +88,9 @@ func runFiberApp() {
 	broadcastUsecase := usecases.NewBroadcastUsecase(discordService, pbRepo)
 	broadcastHandler := handlers.NewBroadcastHandler(broadcastUsecase)
 
+	uiUsecase := usecases.NewUIUsecase(discordService, pbRepo)
+	uiHandler := handlers.NewUIHandler(uiUsecase)
+
 	// Initialize AttendanceUsecase and register Interaction handlers for Gateway
 	attendanceUsecase := usecases.NewAttendanceUsecase(pbRepo)
 	discord.RegisterInteractionHandlers(discordService.Session, attendanceUsecase)
@@ -158,7 +161,11 @@ func runFiberApp() {
 	// Configuration Routes (Schedules & Shifts)
 	api.Get("/config/guilds/:guildId/roles", configHandler.HandleGetGuildRolesConfig)
 	api.Patch("/config/roles/:roleId", configHandler.HandleUpdateRoleConfig)
+	api.Patch("/config/roles/:roleId/channel", configHandler.HandleUpdateSquadChannel)
 	api.Patch("/config/guilds/:guildId", configHandler.HandleUpdateGuildConfig)
+
+	// BFF UI Routes
+	api.Get("/ui/squads/:roleId", uiHandler.HandleSquadDashboard)
 
 	// Analytical Report Routes (Daily Attendance Dashboard)
 	api.Get("/reports/guilds/:guildId/attendances", reportHandler.HandleGetAttendances)

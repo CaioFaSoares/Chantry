@@ -291,3 +291,26 @@ def fetch_export_report(guild_id, start_date, end_date, role_id=None):
     except Exception:
         return None
 
+
+@st.cache_data(ttl=30, show_spinner=False)
+def fetch_squad_dashboard_data(role_id):
+    try:
+        resp = requests.get(f"{base_url}/ui/squads/{role_id}", timeout=10.0)
+        return resp.json() if resp.status_code == 200 else None
+    except Exception:
+        return None
+
+def update_squad_channel(role_id, channel_id):
+    payload = {"squad_channel_id": channel_id}
+    try:
+        resp = requests.patch(
+            f"{base_url}/config/roles/{role_id}/channel",
+            json=payload,
+            timeout=5.0
+        )
+        if resp.status_code == 200:
+            fetch_squad_dashboard_data.clear()
+            return True, resp.json()
+        return False, f"Status: {resp.status_code}"
+    except Exception as e:
+        return False, str(e)
