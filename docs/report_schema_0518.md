@@ -7,10 +7,10 @@ Este relatório documenta a arquitetura, o estado atual das coleções, restriç
 ## 🏗️ Arquitetura de Migração Automática
 
 O **Chantry Go Daemon** embarca o PocketBase como um banco de dados relacional nativo rápido de alto desempenho (SQLite interno). As coleções e esquemas de tabelas são declarativos e sofrem evolução baseados no arquivo:
-- 📄 [pb_schema.json](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/migrations/pb_schema.json)
+- 📄 [pb_schema.json](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/server/internal/migrations/pb_schema.json)
 
 ### Fluxo de Inicialização (`init.go`)
-No boot do container `go-server` / `pocketbase`, o arquivo de migrations [init.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/migrations/init.go) executa a importação declarativa transacional:
+No boot do container `go-server` / `pocketbase`, o arquivo de migrations [init.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/server/internal/migrations/init.go) executa a importação declarativa transacional:
 1. **Embedding estático**: O arquivo `pb_schema.json` é compilado dentro do binário final em Go usando o compilador nativo (`//go:embed pb_schema.json`).
 2. **Preservação de Integridade**: A coleção nativa de autenticação de usuários (`users`) é consultada no banco SQLite físico em `/pb_data/data.db` e mesclada na fila de importação para garantir que credenciais de login administrativas ou do painel não sejam sobrescritas.
 3. **Injeção de Chaves Estrangeiras**: O código injeta programaticamente a relação `user_id` em `students` e `managers` apontando para a tabela `users`.

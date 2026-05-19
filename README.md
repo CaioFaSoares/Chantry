@@ -1,12 +1,13 @@
 # 🌌 Chantry Orchestration Platform
 
-Este é o ambiente inicial do projeto **Chantry**, estruturado para permitir prototipagem rápida e desenvolvimento ágil de Provas de Conceito (POCs). O Chantry utiliza:
-* **Streamlit:** Interface interativa e dinâmica para visualizações e sandbox de comandos.
-* **Go Backend Daemon (`go-server`):** O "cérebro" de alta performance da aplicação, responsável por conexões nativas com a API do Discord, processamento de Cronjobs e sincronizações de dados.
-* **n8n:** Orquestrador visual de fluxos de automações e webhooks.
-* **PocketBase:** Banco de dados relacional (SQLite) e autenticação em tempo real super leve.
+O **Chantry** é uma plataforma de orquestração projetada para gerenciar comunidades no Discord, com foco especial em programas educacionais, mentorias ou turmas de treinamento. Ele automatiza fluxos de presença, provisionamento de infraestrutura (canais privativos) e comunicação em massa.
 
-Todos os serviços estão integrados via **Docker Compose** e configurados em uma faixa de **portas isoladas (série `12XXX`)** para garantir conflito zero com qualquer outro projeto local.
+## 🚀 Tecnologias Core
+
+*   **Go Server Daemon (`go-server`):** O motor de alta performance que gerencia a lógica de negócio, interações com a API do Discord, processamento de Cronjobs e sincronização de dados. O binário é "dual-purpose": pode atuar tanto como o servidor de API (Fiber) quanto como o servidor PocketBase, dependendo dos argumentos de inicialização.
+*   **App:** Interface administrativa para monitoramento de métricas, configuração de horários e execução de comandos manuais.
+*   **PocketBase:** Server-as-a-service leve (SQLite) que gerencia persistência de dados, autenticação e coleções (Estudantes, Presenças, Roles, etc). No Chantry, o PocketBase é estendido nativamente via código Go para suportar migrações automáticas.
+*   **Discord Integration:** Integração nativa via WebSocket Gateway e REST API para automação de canais e interações via botões.
 
 ---
 
@@ -14,81 +15,74 @@ Todos os serviços estão integrados via **Docker Compose** e configurados em um
 
 ```text
 Chantry/
-├── .gitignore             # Evita commitar caches, logs, binários Go e journals de banco
-├── README.md              # Este manual de instruções
-├── docker-compose.yml     # Orquestrador dos containers Streamlit, Go, n8n e PocketBase
-├── n8n_data/              # [IMPORTANTE] SQLite e configurações persistentes do n8n
-├── pb_data/               # [IMPORTANTE] SQLite, tabelas e uploads do PocketBase
-├── backend/               # [NOVO] Serviço backend de alta performance em Go
-│   ├── cmd/
-│   │   └── api/
-│   │       └── main.go    # Entrypoint (servidor Fiber com Logger/CORS e Healthcheck)
-│   ├── Dockerfile         # Dockerfile de compilação multi-stage (Docker Alpine)
-│   └── go.mod             # Mod do Go module
-└── streamlit/             # Diretório do aplicativo Streamlit (Frontend)
-    ├── .streamlit/
-    │   └── config.toml    # Tema premium escuro (Deep Dark Indigo Theme)
-    ├── Dockerfile         # Dockerfile de build para o Streamlit (Python 3.11-slim corrigido)
-    ├── requirements.txt   # Dependências python (Pandas, Plotly, Requests, etc.)
-    ├── app.py             # Landing Page de 4 colunas e Sandbox de Webhooks
-    └── pages/
-        └── 1_n8n_guide.py # Guia dinâmico de integrações
+├── server/                # Core da aplicação em Go
+│   ├── cmd/api/           # Entrypoint da API Fiber
+│   └── internal/
+│       ├── config/        # Carregamento de variáveis de ambiente
+│       ├── cron/          # Workers de broadcast e agendadores de presença
+│       ├── discord/       # Cliente Discord e handlers de interação (Botões)
+│       ├── handlers/      # Handlers HTTP para integração com o App
+│       ├── migrations/    # Scripts de atualização do schema PocketBase
+│       ├── pocketbase/    # Cliente e modelos do banco de dados
+│       └── usecases/      # Lógica de negócio (Attendance, Sync, Provision)
+├── pb_data/               # Banco de dados SQLite e logs do PocketBase (Persistente)
+├── app/                   # Dashboard administrativo em Python
+│   ├── app.py             # Página inicial e visão geral
+│   ├── pages/             # Módulos específicos (Sync, Provisioning, Attendance, etc)
+│   └── utils/             # Clientes de API para comunicação com o server
+└── docker-compose.yml     # Orquestrador da infraestrutura (Go, App, PocketBase)
 ```
 
 ---
 
-## ⚡ Como Rodar o Ambiente com Docker Compose
+## 🛠️ Funcionalidades Principais
 
-### Requisitos:
-* Docker Desktop ou OrbStack instalado e ativo no sistema.
-
-### Passo a Passo:
-
-1. Na raiz do projeto, suba os containers executando:
-   ```bash
-   docker compose up --build
-   ```
-2. O Docker compilará automaticamente a imagem do Streamlit e a imagem do Go Backend (via build multi-stage, **sem necessitar de instalação local do Go ou dependências no seu host**).
-3. Acesse os serviços locais através das portas da série `12XXX`:
-   * 💻 **Streamlit Dashboard:** [http://localhost:12501](http://localhost:12501)
-   * ⚙️ **n8n Automation Engine:** [http://localhost:12678](http://localhost:12678)
-   * 🗄️ **PocketBase Admin Panel:** [http://localhost:12090/_/](http://localhost:12090/_/)
-   * 🐹 **Go Backend Healthcheck:** [http://localhost:12000/api/health](http://localhost:12000/api/health)
+1.  **Presença Automatizada (Attendance):**
+    *   Envio automático de prompts de Check-in/Check-out via Discord com base em cronogramas.
+    *   Monitoramento de status em tempo real (Pendente, Em progresso, Concluído).
+    *   Gestão de períodos de *cooldown* para estudantes.
+2.  **Provisionamento de Infraestrutura:**
+    *   Criação em lote de canais privativos (1-on-1) para estudantes e mentores.
+    *   Configuração automática de permissões e boas-vindas.
+3.  **Sincronização de Dados:**
+    *   Sincronização bidirecional de membros e cargos (roles) entre Discord e PocketBase.
+    *   Mapeamento de estudantes por ID de Discord.
+4.  **Broadcast Center:**
+    *   Envio de mensagens agendadas or imediatas para canais ou cargos específicos.
 
 ---
 
-## 📂 Persistência de Dados e Versionamento Local
+## ⚡ Como Rodar
 
-Os serviços do **n8n** e do **PocketBase** estão configurados para apontar para pastas locais (`./n8n_data` e `./pb_data`) através de *bind mounts*. Isso traz duas vantagens fundamentais para o desenvolvimento do Chantry:
-1. **Segurança contra perda:** Seus fluxos no n8n, esquemas de tabelas, registros, autenticações e arquivos salvos no PocketBase não serão perdidos mesmo que os containers sejam reconstruídos.
-2. **Versionamento no Git:** Toda a configuração, esquemas de tabelas e bancos SQLite (`database.sqlite`, `data.db`, `api.db`) ficam armazenados diretamente no repositório local. Desta forma, ao dar `git commit`, todas as suas POCs de dados, APIs e fluxos estarão salvos no histórico do projeto.
+### 1. Requisitos
+*   Docker e Docker Compose instalados.
+*   Um bot no Discord configurado com as devidas permissões (Administrator recomendado para POC).
 
----
+### 2. Configuração (Variáveis de Ambiente)
+Crie um arquivo `.env` na raiz do projeto com as seguintes chaves:
 
-## 💻 Desenvolvimento Local do Streamlit (Opcional / Fallback)
+```env
+PB_ADMIN_EMAIL=admin@example.com
+PB_ADMIN_PASSWORD=password123
+DISCORD_APP_ID=seu_app_id
+DISCORD_PUBLIC_KEY=sua_public_key
+DISCORD_BOT_TOKEN=seu_bot_token
+```
 
-Se você preferir executar o **Streamlit localmente** fora do Docker (por exemplo, se o daemon do Docker estiver desligado), é possível rodar usando um ambiente virtual Python:
+### 3. Execução
+Suba o ambiente completo:
+```bash
+docker compose up --build
+```
 
-1. Navegue para o diretório raiz e crie um ambiente virtual:
-   ```bash
-   python3 -m venv .venv
-   ```
-2. Ative o ambiente virtual:
-   ```bash
-   source .venv/bin/activate
-   ```
-3. Instale as dependências:
-   ```bash
-   pip install -r streamlit/requirements.txt
-   ```
-4. Inicie o Streamlit localmente (observe que por padrão ele iniciará na porta `8501`, mas consumirá os serviços Docker que estiverem ativos):
-   ```bash
-   streamlit run streamlit/app.py
-   ```
-   O console local abrirá a página em [http://localhost:8501](http://localhost:8501).
+### 4. Portas dos Serviços
+*   💻 **App Dashboard:** [http://localhost:12501](http://localhost:12501)
+*   🗄️ **PocketBase Admin:** [http://localhost:12090/_/](http://localhost:12090/_/)
+*   🐹 **Go Server API:** [http://localhost:12000](http://localhost:12000)
 
 ---
 
-## 🧬 Hot-Reloading Ativo
-
-Tanto rodando pelo Docker quanto rodando localmente, o código do Streamlit suporta **Hot-Reload**. Ou seja: qualquer mudança que você fizer e salvar nos arquivos dentro de `./streamlit/` será detectada pelo Streamlit e você poderá recarregar a interface com um clique no navegador sem precisar reiniciar o servidor!
+## 📂 Persistência e Desenvolvimento
+O projeto utiliza *bind mounts* para as pastas `pb_data` e `app`. Isso permite que:
+1.  **Dados do Banco:** Configurações e registros do PocketBase sejam persistidos entre reinicializações.
+2.  **Hot-Reload:** Alterações no código do App sejam refletidas instantaneamente sem necessidade de rebuild do container.

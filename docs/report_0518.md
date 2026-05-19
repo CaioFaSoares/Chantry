@@ -6,16 +6,16 @@ Este documento sumariza as evoluções arquiteturais, modelagem de dados, motor 
 
 ## 🏛️ Visão Geral da Arquitetura Híbrida
 
-Hoje realizamos a consolidação de uma **arquitetura de imagem única** no backend, a transição para um **PocketBase embarcado (embedded)** em Go, a implementação do **Motor de Provisionamento em Lote de Canais Privados**, o **Motor Cron de Agendamento Dinâmico** e a **remoção completa do n8n da stack**, simplificando a infraestrutura da aplicação.
+Hoje realizamos a consolidação de uma **arquitetura de imagem única** no server, a transição para um **PocketBase embarcado (embedded)** em Go, a implementação do **Motor de Provisionamento em Lote de Canais Privados**, o **Motor Cron de Agendamento Dinâmico** e a **remoção completa do n8n da stack**, simplificando a infraestrutura da aplicação.
 
 O binário `./main` em Go atua em duas frentes independentes com base nos argumentos de execução:
 1. **PocketBase Server (`./main serve`)**: Executa o banco de dados SQLite local embarcado, aplica migrações automáticas de esquema e expõe as portas de dados HTTP na porta `12090` (ou `8090` interno).
-2. **Discord Go Daemon (`./main api`)**: Servidor API em Fiber que gerencia integrações com Discord API, orquestra regras de negócio do backend e atualizações no banco de dados na porta `12000`.
+2. **Discord Go Daemon (`./main api`)**: Servidor API em Fiber que gerencia integrações com Discord API, orquestra regras de negócio do server e atualizações no banco de dados na porta `12000`.
 
 ```mermaid
 graph TD
     subgraph Docker Network [Chantry Network]
-        Streamlit[Streamlit Frontend:12501] -->|HTTP:12000| GoServer[Chantry Go Server: Fiber Daemon]
+        App[App Frontend:12501] -->|HTTP:12000| GoServer[Chantry Go Server: Fiber Daemon]
         GoServer -->|Admin API:8090| PocketBase[PocketBase Embedded Engine]
     end
     
@@ -35,7 +35,7 @@ graph TD
 A persistência do banco de dados local foi modernizada com alta normalização de dados para evitar *anti-patterns* de coleções embutidas, estruturando chaves estrangeiras e regras estritas de segurança.
 
 ### Coleções Estruturadas
-O esquema foi estruturado no arquivo local [pb_schema.json](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/migrations/pb_schema.json) contemplando:
+O esquema foi estruturado no arquivo local [pb_schema.json](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/server/internal/migrations/pb_schema.json) contemplando:
 *   **`guilds`**: Monitoramento dos servidores (Discord ID e Status de ativação).
 *   **`roles`**: Cargos de turmas vinculados a um servidor específico.
 *   **`students`**: Snapshot de alunos sincronizados do Discord, associando-os com `roles`, `guilds`, status escolar e de canais dedicados.
@@ -44,7 +44,7 @@ O esquema foi estruturado no arquivo local [pb_schema.json](file:///Users/caioso
 *   **`activities`**: Atividades e tarefas propostas em cada guilda escolar.
 
 ### Regras de Segurança Aplicadas
-*   **Todas as `*Rules` (list, view, create, etc.) foram trancadas com `""`**: Isso impossibilita requisições diretas não autenticadas vindas da API pública (como browsers e fontes externas), isolando o banco. Apenas conexões contendo cabeçalhos válidos de **Admin JWT** (ou nosso backend) conseguem ler e escrever nas coleções.
+*   **Todas as `*Rules` (list, view, create, etc.) foram trancadas com `""`**: Isso impossibilita requisições diretas não autenticadas vindas da API pública (como browsers e fontes externas), isolando o banco. Apenas conexões contendo cabeçalhos válidos de **Admin JWT** (ou nosso server) conseguem ler e escrever nas coleções.
 *   **Unique Indexes**: Configuração de índices de unicidade nos campos `discord_id` para garantir integridade física no SQLite subjacente.
 
 ---
@@ -54,10 +54,10 @@ O esquema foi estruturado no arquivo local [pb_schema.json](file:///Users/caioso
 Para orquestrar a comunicação do Fiber com o PocketBase, desenvolvemos a camada de persistência nativa em Go sem dependências pesadas, utilizando apenas a biblioteca padrão (`net/http` e `encoding/json`).
 
 ### Componentes Desenvolvidos
-*   **Configurações Dinâmicas:** Estendemos a struct `Config` em [env.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/config/env.go) para suportar as credenciais e URL do PocketBase.
-*   **Models Go:** No pacote [models.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/pocketbase/models.go), estruturamos as structs de dados necessárias.
-*   **REST Client Thread-Safe:** Em [client.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/pocketbase/client.go), implementamos o cliente REST que gerencia de forma segura o JWT de administrador, com auto-anexação de headers nas requisições.
-*   **Repositório Abstrato:** O repositório [repository.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/pocketbase/repository.go) encapsula as operações do banco: `FindFirstByDiscordID`, `CreateRecord`, `UpdateRecord`, `FindFirstByDiscordAndGuild` e `FindManagersByGuild`.
+*   **Configurações Dinâmicas:** Estendemos a struct `Config` em [env.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/server/internal/config/env.go) para suportar as credenciais e URL do PocketBase.
+*   **Models Go:** No pacote [models.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/server/internal/pocketbase/models.go), estruturamos as structs de dados necessárias.
+*   **REST Client Thread-Safe:** Em [client.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/server/internal/pocketbase/client.go), implementamos o cliente REST que gerencia de forma segura o JWT de administrador, com auto-anexação de headers nas requisições.
+*   **Repositório Abstrato:** O repositório [repository.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/server/internal/pocketbase/repository.go) encapsula as operações do banco: `FindFirstByDiscordID`, `CreateRecord`, `UpdateRecord`, `FindFirstByDiscordAndGuild` e `FindManagersByGuild`.
 
 ---
 
@@ -76,7 +76,7 @@ Concluímos o desenvolvimento completo dos fluxos de provisionamento automático
     *   **Permissão dos Managers:** Permite que a equipe de mentores/administradores (carregados via banco na relação da guilda) visualizem e moderem o canal.
 
 ### ⚙️ PRD 3.3 - Motor de Processamento em Lote e Worker Sincronizador
-*   **Resolução Inteligente de IDs:** O Usecase [provision_usecase.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/backend/internal/usecases/provision_usecase.go) recebe os IDs Discord Snowflake de Guilda e Cargo e os resolve para os correspondentes IDs relacionais de 15 caracteres do PocketBase para que as queries funcionem perfeitamente.
+*   **Resolução Inteligente de IDs:** O Usecase [provision_usecase.go](file:///Users/caiosoares/_Nexus/sirius/Projects/Chantry/server/internal/usecases/provision_usecase.go) recebe os IDs Discord Snowflake de Guilda e Cargo e os resolve para os correspondentes IDs relacionais de 15 caracteres do PocketBase para que as queries funcionem perfeitamente.
 *   **Motor de Cooldown (Pulmão):** Adiciona uma pausa nativa de `800ms` (`time.Sleep`) em cada iteração, protegendo a conta do Bot de bloqueios da API REST do Discord.
 *   **Garantia de Idempotência:** Busca no PocketBase utilizando a query `FindStudentsPendingProvision` que busca exclusivamente alunos cujo campo `channel_id` esteja vazio e inclui `limit=200` para processamento completo em lote. Alunos com canal ativo são ignorados.
 *   **Transacionalidade e Durabilidade:** Salva o `channel_id` individualmente no PocketBase logo após a criação no Discord, prevenindo perda de estado em caso de queda de rede ou reinicialização.
@@ -104,15 +104,15 @@ Caso a base de dados do PocketBase seja deletada ou resetada, o Chantry consegue
 *   **Algoritmo de Correlação Bidirecional**:
     1.  **Mecanismo por Discord ID (Estratégia Primária - Ultra-Precisa)**: O motor de auto-healing escaneará cada canal sob a categoria selecionada. Ele analisa os `PermissionOverwrites` buscando por uma permissão de membro cujo ID corresponda a um aluno cadastrado no PocketBase. Por utilizar o ID Snowflake único do Discord (que nunca muda), esta estratégia é totalmente imune a trocas de nicknames e usernames dos alunos.
     2.  **Fallback por Username (Estratégia Secundária)**: Caso as permissões tenham sido alteradas, o algoritmo extrai o username do padrão de nomenclatura do canal (`1-on-1-<username>`) e tenta associá-lo ao aluno correspondente.
-*   **Interface no Streamlit (`3_infra_provisioning.py`)**: Inclui uma zona segura com `st.expander` onde o administrador escolhe a categoria com os canais órfãos e dispara a recuperação transacional do banco em segundos, exibindo os resultados consolidados das métricas de cura.
+*   **Interface no App (`3_infra_provisioning.py`)**: Inclui uma zona segura com `st.expander` onde o administrador escolhe a categoria com os canais órfãos e dispara a recuperação transacional do banco em segundos, exibindo os resultados consolidados das métricas de cura.
 
 ### ⏰ PRD 4.4 - Motor de Saída (Clock-out Timer)
 Desenvolvemos uma rotina assíncrona desacoplada em Go (`StartClockOutTicker`) que varre o banco a cada 1 minuto localizando registros com status `pending_checkout`. Se o intervalo desde a hora de entrada (`clock_in`) acrescido do cooldown configurado ultrapassar o horário atual, um botão vermelho interativo (`btn_clock_out`) é despachado no canal privado do respectivo aluno e a flag `checkout_prompt_sent` é atualizada para evitar spam.
 
 ### 📊 PRD 4.5 - Frontend: Dashboard de Ponto (Visão Gerencial)
 A interface administrativa possui agora um painel gerencial consolidado (`5_attendance_dashboard.py`).
-*   **Agregador no Backend**: Nova rota `GET /api/reports/guilds/:guildId/attendances` que extrai as presenças diárias, mapeia nicknames e usernames de forma eficiente e expõe um payload DTO unificado.
-*   **Layout Streamlit**: Tela com visualização premium (Outfit font, glassmorphism), indicadores dinâmicos em cards de métricas (Presenças completas, em andamento, atrasados e faltas) e tabela Pandas contendo emojis descritivos estruturada de forma responsiva.
+*   **Agregador no Server**: Nova rota `GET /api/reports/guilds/:guildId/attendances` que extrai as presenças diárias, mapeia nicknames e usernames de forma eficiente e expõe um payload DTO unificado.
+*   **Layout App**: Tela com visualização premium (Outfit font, glassmorphism), indicadores dinâmicos em cards de métricas (Presenças completas, em andamento, atrasados e faltas) e tabela Pandas contendo emojis descritivos estruturada de forma responsiva.
 
 ---
 
@@ -121,7 +121,7 @@ A interface administrativa possui agora um painel gerencial consolidado (`5_atte
 Implementamos a **Central de Mensagens Avançada** (Megafone), permitindo que administradores realizem disparos em lote no servidor do Discord de forma imediata ou agendada, integrados de forma assíncrona ao banco local.
 
 ### 🎯 PRD 6.1 & 6.2 - Modelagem de Disparo e Validação de Tipos (Targeted Broadcast)
-*   **Abordagem Livre de Efeitos Colaterais:** O backend suporta duas direções principais de envio:
+*   **Abordagem Livre de Efeitos Colaterais:** O server suporta duas direções principais de envio:
     *   `public` (Aviso Geral): Busca o `announcement_channel_id` configurado na guilda e envia uma única mensagem formatada.
     *   `private` (Mensagem Direta 1-on-1): Busca os canais 1-on-1 ativos correspondentes aos filtros e realiza o envio seguro de mensagens em lote, com pausa preventiva anti-spam de `500ms`.
 *   **Migração de Schema e Resolução de Erros 404:** Descobrimos que a coleção `broadcasts` no PocketBase precisava ser criada e registrada internamente para estar exposta na REST API. Corrigimos isso de forma transacional:
@@ -132,8 +132,8 @@ Implementamos a **Central de Mensagens Avançada** (Megafone), permitindo que ad
 ### ⚙️ PRD 6.3 - Worker Assíncrono e Correção do `UpdateRecord`
 *   **Fire-and-Forget Seguro:** Corrigimos o método `UpdateRecord` no pacote `repository.go` do Go. Anteriormente, o Worker assíncrono passava o ponteiro `dest` como `nil` para atualizações de status silenciosas, o que disparava um panic de *json.Unmarshal(nil)* ao tentar desserializar a resposta HTTP. Agora, o repositório valida se `dest != nil` antes de invocar o decoder, assegurando a estabilidade das atualizações assíncronas de estado (`scheduled` -> `processing` -> `completed`/`failed`).
 
-### 🎨 PRD 6.4 - Reatividade de Interface Premium no Streamlit (`6_broadcast_center.py`)
-*   **Reatividade Resolvida:** Os componentes reativos (Seletor de Destino, Multiselect de Cargos Alvo, Tipo de Envio e inputs de Data/Hora de agendamento) foram extraídos para **fora** do `st.form` do Streamlit. Isso permite que a página re-renderize os inputs instantaneamente ao interagir, garantindo que:
+### 🎨 PRD 6.4 - Reatividade de Interface Premium no App (`6_broadcast_center.py`)
+*   **Reatividade Resolvida:** Os componentes reativos (Seletor de Destino, Multiselect de Cargos Alvo, Tipo de Envio e inputs de Data/Hora de agendamento) foram extraídos para **fora** do `st.form` do App. Isso permite que a página re-renderize os inputs instantaneamente ao interagir, garantindo que:
     *   O seletor de cargos alvos seja condicionalmente exibido apenas sob a opção de DM filtrada.
     *   Os seletores de data/hora fiquem cinzas e desabilitados (`disabled=True`) quando a opção "Enviar Agora" estiver selecionada.
 *   **Envio via Session State:** O form cuida estritamente do conteúdo da mensagem e do submit, lendo dinamicamente os valores de agendamento gravados no `st.session_state` no instante do clique, garantindo um fluxo limpo sem perder o estado reativo.
@@ -145,9 +145,9 @@ Implementamos a **Central de Mensagens Avançada** (Megafone), permitindo que ad
 
 Realizamos os testes de compilação estática em ambas as linguagens e a integridade de todas as entregas foi validada com **100% de sucesso**:
 
-1.  **Backend Go Daemon (`go build`):**
-    *   **Comando:** `go build -o /dev/null ./cmd/api/main.go` (no diretório `backend`)
+1.  **Server Go Daemon (`go build`):**
+    *   **Comando:** `go build -o /dev/null ./cmd/api/main.go` (no diretório `server`)
     *   **Resultado:** Compilação bem-sucedida, sem avisos de tipagem estática ou erros de injeção (`Exit code: 0`).
-2.  **Frontend Streamlit (`python3 -m py_compile`):**
-    *   **Comando:** `python3 -m py_compile streamlit/app.py` e `python3 -m py_compile streamlit/pages/5_attendance_dashboard.py`
+2.  **Frontend App (`python3 -m py_compile`):**
+    *   **Comando:** `python3 -m py_compile app/app.py` e `python3 -m py_compile app/pages/5_attendance_dashboard.py`
     *   **Resultado:** Sintaxe Python e importações validadas sem erros (`Exit code: 0`).
