@@ -25,7 +25,7 @@ Chantry/
 │       ├── migrations/    # Scripts de atualização do schema PocketBase
 │       ├── pocketbase/    # Cliente e modelos do banco de dados
 │       └── usecases/      # Lógica de negócio (Attendance, Sync, Provision)
-├── pb_data/               # Banco de dados SQLite e logs do PocketBase (Persistente)
+├── db/                    # Banco de dados SQLite e logs do PocketBase (Persistente)
 ├── app/                   # Dashboard administrativo em Python
 │   ├── app.py             # Página inicial e visão geral
 │   ├── pages/             # Módulos específicos (Sync, Provisioning, Attendance, etc)
@@ -83,6 +83,6 @@ docker compose up --build
 ---
 
 ## 📂 Persistência e Desenvolvimento
-O projeto utiliza *bind mounts* para as pastas `pb_data` e `app`. Isso permite que:
+O projeto utiliza *bind mounts* para as pastas `db` e `app`. Isso permite que:
 1.  **Dados do Banco:** Configurações e registros do PocketBase sejam persistidos entre reinicializações.
 2.  **Hot-Reload:** Alterações no código do App sejam refletidas instantaneamente sem necessidade de rebuild do container.
