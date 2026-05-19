@@ -559,3 +559,43 @@ func (r *Repository) FindScheduledBroadcastsBefore(cutoff string) ([]BroadcastRe
 	return broadcasts, nil
 }
 
+
+// GetAttendancesByDateRange queries the PocketBase collections for all attendances in a specific guild,
+// optionally filtered by role, within a specified date range. It expands the 'student_id.role_id' relation
+// to resolve student details and their assigned role/squad name for BI reports.
+func (r *Repository) GetAttendancesByDateRange(guildID, roleID, startDate, endDate string) ([]AttendanceRecord, error) {
+	// Base filter by guild and date range
+	filter := fmt.Sprintf("student_id.guild_id='%s' && date>='%s 00:00:00' && date<='%s 23:59:59'", guildID, startDate, endDate)
+	
+	// Optional role filter
+	if roleID != "" {
+		filter += fmt.Sprintf(" && student_id.role_id='%s'", roleID)
+	}
+
+	expand := "student_id.role_id"
+	// Use a high limit to ensure we capture all records for a typical month's report
+	endpoint := fmt.Sprintf("api/collections/attendances/records?filter=%s&expand=%s&limit=5000", url.QueryEscape(filter), url.QueryEscape(expand))
+
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pocketbase for date range attendances: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pocketbase date range attendances query failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	var attendances []AttendanceRecord
+	if err := json.Unmarshal(listResp.Items, &attendances); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal attendances array: %w", err)
+	}
+
+	return attendances, nil
+}

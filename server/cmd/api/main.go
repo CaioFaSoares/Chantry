@@ -79,7 +79,8 @@ func runFiberApp() {
 	provisionHandler := handlers.NewProvisionHandler(provisionUsecase)
 
 	configHandler := handlers.NewConfigHandler(pbRepo)
-	reportHandler := handlers.NewReportHandler(pbRepo)
+	reportUsecase := usecases.NewReportUsecase(pbRepo)
+	reportHandler := handlers.NewReportHandler(pbRepo, reportUsecase)
 
 	testUsecase := usecases.NewTestUsecase(pbRepo, discordService)
 	testHandler := handlers.NewTestHandler(testUsecase, pbRepo)
@@ -156,6 +157,7 @@ func runFiberApp() {
 
 	// Analytical Report Routes (Daily Attendance Dashboard)
 	api.Get("/reports/guilds/:guildId/attendances", reportHandler.HandleGetAttendances)
+	api.Get("/reports/guilds/:guildId/export", reportHandler.HandleExportReport)
 
 	// Sandbox Dry Run Test Routes
 	api.Post("/test/attendance/trigger", testHandler.HandleTestAttendanceTrigger)

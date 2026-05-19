@@ -71,9 +71,11 @@ type AttendanceRecord struct {
 		Student struct {
 			Username  string `json:"username"` // NOVO
 			Nickname  string `json:"nickname"` // NOVO
+			DiscordID string `json:"discord_id"` // NOVO: Para relatórios
 			ChannelID string `json:"channel_id"`
 			Role      struct {
-				CheckoutCooldown int `json:"checkout_cooldown"`
+				Name             string `json:"name"` // NOVO: Para relatórios
+				CheckoutCooldown int    `json:"checkout_cooldown"`
 			} `json:"role_id"`
 		} `json:"student_id"`
 	} `json:"expand"`

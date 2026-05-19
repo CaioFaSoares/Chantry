@@ -266,3 +266,22 @@ def cancel_broadcast(broadcast_id):
     except Exception as e:
         return False, str(e)
 
+@st.cache_data(ttl=30, show_spinner=False)
+def fetch_export_report(guild_id, start_date, end_date, role_id=None):
+    params = {
+        "start_date": start_date,
+        "end_date": end_date
+    }
+    if role_id and role_id != "all":
+        params["role_id"] = role_id
+
+    try:
+        resp = requests.get(
+            f"{base_url}/reports/guilds/{guild_id}/export",
+            params=params,
+            timeout=10.0
+        )
+        return resp.json() if resp.status_code == 200 else None
+    except Exception:
+        return None
+
