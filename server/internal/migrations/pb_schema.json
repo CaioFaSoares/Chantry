@@ -164,6 +164,16 @@
       },
       {
         "system": false,
+        "id": "fld_role_is_monitored",
+        "name": "is_monitored",
+        "type": "bool",
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "system": false,
         "id": "q4lckh5x",
         "name": "is_active",
         "type": "bool",
