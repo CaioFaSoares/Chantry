@@ -24,12 +24,12 @@ services:
     ports:
       - "12090:8090"
     volumes:
-      - ./pb_data:/pb_data
+      - ./db:/db
     environment:
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
     restart: unless-stopped
-    command: [ "./main", "serve", "--http=0.0.0.0:8090", "--dir=/pb_data" ]
+    command: [ "./main", "serve", "--http=0.0.0.0:8090", "--dir=/db" ]
 
   go-server:
     build:
