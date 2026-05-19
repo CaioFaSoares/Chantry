@@ -599,3 +599,25 @@ func (r *Repository) GetAttendancesByDateRange(guildID, roleID, startDate, endDa
 
 	return attendances, nil
 }
+
+// CountRecords queries the collection and returns the total number of records.
+func (r *Repository) CountRecords(collection string) (int, error) {
+	endpoint := fmt.Sprintf("api/collections/%s/records?limit=1", collection)
+	resp, err := r.client.SendRequest("GET", endpoint, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to issue count request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("pocketbase count failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var listResp ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return 0, fmt.Errorf("failed to decode list response: %w", err)
+	}
+
+	return listResp.TotalItems, nil
+}
