@@ -116,7 +116,32 @@ A interface administrativa possui agora um painel gerencial consolidado (`5_atte
 
 ---
 
+## 📢 Épico 6: Motor de Comunicação (Broadcast Center)
+
+Implementamos a **Central de Mensagens Avançada** (Megafone), permitindo que administradores realizem disparos em lote no servidor do Discord de forma imediata ou agendada, integrados de forma assíncrona ao banco local.
+
+### 🎯 PRD 6.1 & 6.2 - Modelagem de Disparo e Validação de Tipos (Targeted Broadcast)
+*   **Abordagem Livre de Efeitos Colaterais:** O backend suporta duas direções principais de envio:
+    *   `public` (Aviso Geral): Busca o `announcement_channel_id` configurado na guilda e envia uma única mensagem formatada.
+    *   `private` (Mensagem Direta 1-on-1): Busca os canais 1-on-1 ativos correspondentes aos filtros e realiza o envio seguro de mensagens em lote, com pausa preventiva anti-spam de `500ms`.
+*   **Migração de Schema e Resolução de Erros 404:** Descobrimos que a coleção `broadcasts` no PocketBase precisava ser criada e registrada internamente para estar exposta na REST API. Corrigimos isso de forma transacional:
+    1.  Redefinimos `target_type` para `text` e `target_roles` para `json` em `pb_schema.json` para evitar que o validador select do PocketBase salvasse valores nulos de forma silenciosa.
+    2.  Criamos a **Migration 2** (`2_fix_broadcasts_schema.go`) para limpar qualquer tabela SQL crua conflitante.
+    3.  Criamos a **Migration 3** (`3_reimport_schema.go`) para forçar o re-import do schema JSON, registrando oficialmente a coleção no PocketBase e resolvendo erros de 404 da REST API.
+
+### ⚙️ PRD 6.3 - Worker Assíncrono e Correção do `UpdateRecord`
+*   **Fire-and-Forget Seguro:** Corrigimos o método `UpdateRecord` no pacote `repository.go` do Go. Anteriormente, o Worker assíncrono passava o ponteiro `dest` como `nil` para atualizações de status silenciosas, o que disparava um panic de *json.Unmarshal(nil)* ao tentar desserializar a resposta HTTP. Agora, o repositório valida se `dest != nil` antes de invocar o decoder, assegurando a estabilidade das atualizações assíncronas de estado (`scheduled` -> `processing` -> `completed`/`failed`).
+
+### 🎨 PRD 6.4 - Reatividade de Interface Premium no Streamlit (`6_broadcast_center.py`)
+*   **Reatividade Resolvida:** Os componentes reativos (Seletor de Destino, Multiselect de Cargos Alvo, Tipo de Envio e inputs de Data/Hora de agendamento) foram extraídos para **fora** do `st.form` do Streamlit. Isso permite que a página re-renderize os inputs instantaneamente ao interagir, garantindo que:
+    *   O seletor de cargos alvos seja condicionalmente exibido apenas sob a opção de DM filtrada.
+    *   Os seletores de data/hora fiquem cinzas e desabilitados (`disabled=True`) quando a opção "Enviar Agora" estiver selecionada.
+*   **Envio via Session State:** O form cuida estritamente do conteúdo da mensagem e do submit, lendo dinamicamente os valores de agendamento gravados no `st.session_state` no instante do clique, garantindo um fluxo limpo sem perder o estado reativo.
+
+---
+
 ## 🚀 Status da Compilação e Validações
+
 
 Realizamos os testes de compilação estática em ambas as linguagens e a integridade de todas as entregas foi validada com **100% de sucesso**:
 
