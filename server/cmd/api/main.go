@@ -91,6 +91,8 @@ func runFiberApp() {
 	uiUsecase := usecases.NewUIUsecase(discordService, pbRepo)
 	uiHandler := handlers.NewUIHandler(uiUsecase)
 
+	systemHandler := handlers.NewSystemHandler(pbRepo, discordService, cfg.DiscordAppID)
+
 	// Initialize AttendanceUsecase and register Interaction handlers for Gateway
 	attendanceUsecase := usecases.NewAttendanceUsecase(pbRepo)
 	discord.RegisterInteractionHandlers(discordService.Session, attendanceUsecase)
@@ -136,6 +138,7 @@ func runFiberApp() {
 
 	// Discord Integration Endpoints (REST API Proxy)
 	api := app.Group("/api")
+	api.Get("/system/health", systemHandler.HandleGetHealth)
 	api.Get("/discord/guilds", discordHandler.HandleGetGuilds)
 	api.Get("/discord/guilds/:guildId/roles", discordHandler.HandleGetGuildRoles)
 	api.Get("/discord/guilds/:guildId/members", discordHandler.HandleGetGuildMembers)

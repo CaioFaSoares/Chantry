@@ -267,6 +267,7 @@ func (u *ProvisionUsecase) HealChannelsByCategory(guildDiscordID string, categor
 // ProvisionPageMetrics holds metric configurations for the provision page BFF.
 type ProvisionPageMetrics struct {
 	TotalStudentsWithoutChannels int `json:"total_students_without_channels"`
+	TotalStudents                int `json:"total_students"`
 }
 
 // ProvisionPageData holds the aggregated data payload for the provision page BFF.
@@ -327,6 +328,7 @@ func (u *ProvisionUsecase) GetProvisionPageData(guildDiscordID string) (Provisio
 				}
 			}
 			data.Metrics.TotalStudentsWithoutChannels = count
+			data.Metrics.TotalStudents = len(students)
 		}
 	}
 

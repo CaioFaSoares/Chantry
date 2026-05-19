@@ -21,6 +21,14 @@ def fetch_server_health():
     except Exception:
         return None
 
+@st.cache_data(ttl=5)
+def fetch_system_health():
+    try:
+        resp = requests.get(f"{base_url}/system/health", timeout=3.0)
+        return resp.json() if resp.status_code == 200 else None
+    except Exception:
+        return None
+
 def get_server_timezone():
     health = fetch_server_health()
     if health and "timezone" in health:

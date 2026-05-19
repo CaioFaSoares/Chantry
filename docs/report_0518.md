@@ -140,14 +140,81 @@ Implementamos a **Central de Mensagens Avançada** (Megafone), permitindo que ad
 
 ---
 
-## 🚀 Status da Compilação e Validações
+## 🌌 Épico R: Página Zero (Health Dashboard & Onboarding Wizard)
 
+Implementamos a **Página Zero** (Wizard de Onboarding e Dashboard de Saúde) atuando como uma Torre de Controle central e auxiliando administradores na inicialização e diagnóstico do ecossistema.
+
+### 🩺 BFF de Saúde (`GET /api/system/health`)
+*   Criamos uma rota unificada e rápida `/api/system/health` no Go Daemon. O endpoint consulta o WebSocket do Discord para confirmar se a conexão está ativa (`connected` ou `disconnected`), realiza a contagem total de registros das coleções `guilds`, `students` e `attendances` no PocketBase para atestar sua integridade (`healthy` ou `unhealthy`), e expõe o Client/App ID configurado na variável `DISCORD_APP_ID`.
+
+### 🧭 Painel Central & Wizard no App (`app.py`)
+*   Refatoramos completamente o arquivo raiz do Streamlit para se comunicar dinamicamente com a rota de saúde.
+*   **Resiliência a Quedas:** Caso o Go Daemon esteja fora do ar, o Streamlit intercepta graciosamente o erro de rede, exibindo uma tela vermelha limpa explicando o problema e interrompendo a renderização (`st.stop()`).
+*   **Visualização Premium de Status:** Exibição elegante em 3 cards no estilo glassmorphism mostrando a integridade do Go Daemon, do PocketBase e da conexão WebSocket do bot.
+*   **Métricas Ativas:** Exibição em blocos `st.metric` do total de servidores monitorados, alunos cadastrados e presenças computadas.
+*   **Linkador OAuth2 Dinâmico:** Um wizard de 3 passos explicando a inicialização correta da plataforma e fornecendo o botão mágico `Convidar Bot para o Discord`, montando a URL dinamicamente via `st.link_button` usando as permissões completas de administrador (`permissions=8`) e escopos necessários (`bot+applications.commands`).
+
+---
+
+---
+
+## ⚙️ Épico R.2: A "Super Tela" de Setup do Servidor (Consolidação e Fail-Safes)
+
+Implementamos a consolidação das páginas de configuração inicial em uma única e poderosa tela unificada: `2_server_setup.py`.
+
+### 🧹 Limpeza de Arquivos Legados
+Ficheiros independentes excluídos da pasta `app/pages/`:
+- `2_discord_sync.py`
+- `3_infra_provisioning.py`
+- `4_schedule_config.py`
+- `8_squad_management.py`
+
+### 🏗️ Lógica de Configuração em Abas e Proteções (Fail-Safes)
+Toda a configuração está contida no arquivo unificado `2_server_setup.py`:
+1. **Seletor de Contexto Global**: O ID da guilda (`guild_id`) é selecionado na região principal da página no topo e compartilhado via `st.session_state` entre as abas.
+2. **Aba 1 (🔄 Sincronização)**: Sincronização de cargos primários, secundários e equipe/managers.
+3. **Aba 2 (👥 Estrutura e Squads)**: Configuração de canais oficiais por turma, métricas rápidas e roster de alunos cadastrados.
+4. **Aba 3 (⏰ Regras de Ponto)**: Triagem de cargos monitorados, horários de check-in/cooldown e Sandbox Tester (Dry Run).
+5. **Aba 4 (🏗️ Infraestrutura)**: Canal de avisos geral, gerenciamento de categorias do Discord, provisionamento de salas privadas 1-on-1 e Auto-Healing.
+6. **Mecanismos de Bloqueio**:
+   - Caso a guilda possua 0 alunos registrados na base, as abas 2, 3 e 4 exibem `st.warning("⚠️ Sincronize o servidor primeiro.")` e impedem interações.
+   - Caso a triagem na Aba 3 não possua cargos monitorados, o botão de provisionamento de canais na Aba 4 é desativado.
+
+---
+
+## 📦 Épico R.3: Consolidação da Operação (Comunicação e Relatórios)
+
+Unificamos a gestão de dados operacionais e de engajamento do Chantry em dois painéis principais, reduzindo a complexidade cognitiva da interface.
+
+### 🧹 Limpeza de Arquivos Legados
+Ficheiros independentes excluídos da pasta `app/pages/`:
+- `5_attendance_dashboard.py` (antigo painel diário)
+- `6_broadcast_center.py` (antigo megafone/comunicados)
+- `7_reports_export.py` (antigo exportador BI)
+
+### 📊 3. Centro de Inteligência e Relatórios (`3_intelligence_center.py`)
+Agrupa sob abas:
+1. **Visão Diária (Ponto)**: Roster de presenças do dia, indicadores rápidos (Total, Completos, Em Andamento, Atrasados e Faltas).
+2. **Visão Histórica & Exportação**: Filtro por período de datas e cargo Discord, métricas BI acumuladas e exportação direta e segura de arquivos CSV de frequência.
+
+### 📢 4. Hub de Engajamento (`4_engagement_hub.py`)
+Agrupa sob abas:
+1. **Central de Mensagens (Megafone)**: Composição de comunicados públicos ou privados via DMs 1-on-1 para os alunos com sub-navegação em `st.radio` (Compor, Agendados e Histórico).
+2. **Calendário de Aulas**: Placeholder com informações sobre o motor de calendário a ser desenvolvido no próximo épico.
+
+Ambos os hubs compartilham a seleção global do servidor no topo da página principal via `st.session_state["selected_guild_id"]`.
+
+---
+
+## 🚀 Status da Compilação e Validações
 
 Realizamos os testes de compilação estática em ambas as linguagens e a integridade de todas as entregas foi validada com **100% de sucesso**:
 
 1.  **Server Go Daemon (`go build`):**
     *   **Comando:** `go build -o /dev/null ./cmd/api/main.go` (no diretório `server`)
-    *   **Resultado:** Compilação bem-sucedida, sem avisos de tipagem estática ou erros de injeção (`Exit code: 0`).
+    *   **Resultado:** Compilação bem-sucedida, sem erros de tipagem estática ou injeção (`Exit code: 0`).
 2.  **Frontend App (`python3 -m py_compile`):**
-    *   **Comando:** `python3 -m py_compile app/app.py` e `python3 -m py_compile app/pages/5_attendance_dashboard.py`
+    *   **Comando:** `python3 -m py_compile app/pages/2_server_setup.py app/pages/3_intelligence_center.py app/pages/4_engagement_hub.py`
     *   **Resultado:** Sintaxe Python e importações validadas sem erros (`Exit code: 0`).
+
+
