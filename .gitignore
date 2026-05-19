@@ -25,9 +25,9 @@ n8n/
 
 # PocketBase local data (tracking databases and configs in the repository)
 # If you want to ignore everything in pb_data, uncomment the line below:
-# pb_data/
-pb_data/*.db-shm
-pb_data/*.db-wal
+db/
+db/*.db-shm
+db/*.db-wal
 
 
 
