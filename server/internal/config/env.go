@@ -15,6 +15,7 @@ type Config struct {
 	PocketBaseURL    string
 	PBAdminEmail     string
 	PBAdminPassword  string
+	Timezone         string
 }
 
 // LoadConfig loads variables from a physical .env file if available,
@@ -23,6 +24,11 @@ func LoadConfig() (*Config, error) {
 	// Attempt to load .env. If it doesn't exist, ignore as variables
 	// are expected to be injected via OS environment or Docker Compose.
 	_ = godotenv.Load()
+
+	timezone := os.Getenv("TIMEZONE")
+	if timezone == "" {
+		timezone = "America/Sao_Paulo"
+	}
 
 	discordAppID := os.Getenv("DISCORD_APP_ID")
 	discordPublicKey := os.Getenv("DISCORD_PUBLIC_KEY")
@@ -58,5 +64,6 @@ func LoadConfig() (*Config, error) {
 		PocketBaseURL:    pocketBaseURL,
 		PBAdminEmail:     pbAdminEmail,
 		PBAdminPassword:  pbAdminPassword,
+		Timezone:         timezone,
 	}, nil
 }

@@ -5,7 +5,8 @@ from utils.api_client import (
     fetch_guilds,
     fetch_broadcast_page_data,
     schedule_broadcast,
-    cancel_broadcast
+    cancel_broadcast,
+    get_server_timezone
 )
 
 # 1. Page Config
@@ -280,10 +281,15 @@ else:
                         if _delivery == "Enviar Agora":
                             scheduled_dt = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=10)
                         else:
-                            local_dt = datetime.datetime.combine(_date, _time)
+                            import pytz
+                            # Localize the naive datetime to the server timezone before converting to UTC
+                            server_tz_str = get_server_timezone()
+                            local_tz = pytz.timezone(server_tz_str)
+                            naive_dt = datetime.datetime.combine(_date, _time)
+                            local_dt = local_tz.localize(naive_dt)
                             scheduled_dt = local_dt.astimezone(datetime.timezone.utc)
 
-                        scheduled_str = scheduled_dt.strftime("%Y-%m-%d %H:%M:%SZ")
+                        scheduled_str = scheduled_dt.strftime("%Y-%m-%d %H:%M:%S.000Z")
 
                         with st.spinner("Persistindo agendamento no banco de dados..."):
                             success, result = schedule_broadcast(
@@ -307,7 +313,12 @@ else:
         # TAB 2: SCHEDULED BROADCASTS
         # =========================================================================
         with tabs[1]:
-            st.markdown("<h3 class='section-title'>⏳ Comunicados Agendados</h3>", unsafe_allow_html=True)
+            col_t1, col_t2 = st.columns([0.8, 0.2])
+            col_t1.markdown("<h3 class='section-title'>⏳ Comunicados Agendados</h3>", unsafe_allow_html=True)
+            if col_t2.button("🔄 Atualizar Lista", use_container_width=True):
+                fetch_broadcast_page_data.clear()
+                st.rerun()
+                
             scheduled_items = [b for b in broadcasts if b.get("status") == "scheduled"]
 
             if not scheduled_items:
@@ -315,8 +326,13 @@ else:
             else:
                 for item in scheduled_items:
                     try:
-                        dt_utc = datetime.datetime.strptime(item["schedule_time"], "%Y-%m-%d %H:%M:%SZ")
-                        dt_local = dt_utc.replace(tzinfo=datetime.timezone.utc).astimezone()
+                        import pytz
+                        # Format is YYYY-MM-DD HH:mm:ss.SSSZ
+                        dt_utc = datetime.datetime.strptime(item["schedule_time"], "%Y-%m-%d %H:%M:%S.000Z")
+                        dt_utc = dt_utc.replace(tzinfo=datetime.timezone.utc)
+                        server_tz_str = get_server_timezone()
+                        local_tz = pytz.timezone(server_tz_str)
+                        dt_local = dt_utc.astimezone(local_tz)
                         local_time_str = dt_local.strftime("%d/%m/%Y às %H:%M")
                     except Exception:
                         local_time_str = item["schedule_time"]

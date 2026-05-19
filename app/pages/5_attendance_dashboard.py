@@ -77,6 +77,7 @@ st.markdown(custom_css, unsafe_allow_html=True)
 
 from utils.api_client import (
     fetch_server_health,
+    get_server_timezone,
     fetch_guilds,
     fetch_guild_roles_config,
     fetch_attendances
@@ -97,15 +98,16 @@ if health and "timestamp" in health:
         dt_str = health["timestamp"]
         dt = datetime.fromisoformat(dt_str)
         formatted_time = dt.strftime("%H:%M:%S (%d/%m/%Y)")
-        tz_name = health.get("timezone", "America/Sao_Paulo")
+        tz_name = get_server_timezone()
         
         st.markdown(
             f'<div class="clock-badge">⏰ <b>Horário do Servidor:</b> {formatted_time} &nbsp;|&nbsp; 🌍 <b>Timezone:</b> {tz_name}</div>',
             unsafe_allow_html=True
         )
     except Exception:
+        tz_name = get_server_timezone()
         st.markdown(
-            f'<div class="clock-badge">⏰ <b>Horário do Servidor:</b> {health["timestamp"]} &nbsp;|&nbsp; 🌍 <b>Timezone:</b> America/Sao_Paulo</div>',
+            f'<div class="clock-badge">⏰ <b>Horário do Servidor:</b> {health["timestamp"]} &nbsp;|&nbsp; 🌍 <b>Timezone:</b> {tz_name}</div>',
             unsafe_allow_html=True
         )
 else:

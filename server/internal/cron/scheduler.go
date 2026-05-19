@@ -10,17 +10,17 @@ import (
 )
 
 // StartDynamicCron launches a background ticker that queries PocketBase for roles
-// configured to check-in at the current minute (in America/Sao_Paulo timezone) and sends interactive buttons.
-func StartDynamicCron(repo *pocketbase.Repository, discordService *discord.DiscordService) {
+// configured to check-in at the current minute (in the provided timezone) and sends interactive buttons.
+func StartDynamicCron(repo *pocketbase.Repository, discordService *discord.DiscordService, timezone string) {
 	log.Println("⏰ CRON: Starting dynamic cron scheduler...")
 
-	// Load Sao Paulo Timezone
-	loc, err := time.LoadLocation("America/Sao_Paulo")
+	// Load Timezone
+	loc, err := time.LoadLocation(timezone)
 	if err != nil {
-		log.Printf("⚠️ CRON WARNING: Failed to load America/Sao_Paulo location: %v. Falling back to UTC/Local.", err)
+		log.Printf("⚠️ CRON WARNING: Failed to load %s location: %v. Falling back to UTC/Local.", timezone, err)
 		loc = time.Local
 	} else {
-		log.Println("⏰ CRON: Using America/Sao_Paulo timezone database.")
+		log.Printf("⏰ CRON: Using %s timezone database.", timezone)
 	}
 
 	// 1-minute ticker
@@ -95,13 +95,13 @@ func StartDynamicCron(repo *pocketbase.Repository, discordService *discord.Disco
 
 // StartClockOutTicker launches a background 1-minute ticker that checks for students currently in 'pending_checkout'
 // who have exceeded their role's checkout_cooldown window. If exceeded, it dispatches the check-out button prompt.
-func StartClockOutTicker(repo *pocketbase.Repository, discordService *discord.DiscordService) {
+func StartClockOutTicker(repo *pocketbase.Repository, discordService *discord.DiscordService, timezone string) {
 	log.Println("⏰ CLOCK-OUT TICKER: Starting clock-out dynamic ticker...")
 
-	// Load Sao Paulo Timezone
-	loc, err := time.LoadLocation("America/Sao_Paulo")
+	// Load Timezone
+	loc, err := time.LoadLocation(timezone)
 	if err != nil {
-		log.Printf("⚠️ CLOCK-OUT TICKER WARNING: Failed to load America/Sao_Paulo location: %v. Falling back to UTC/Local.", err)
+		log.Printf("⚠️ CLOCK-OUT TICKER WARNING: Failed to load %s location: %v. Falling back to UTC/Local.", timezone, err)
 		loc = time.Local
 	}
 

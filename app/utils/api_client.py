@@ -21,6 +21,12 @@ def fetch_server_health():
     except Exception:
         return None
 
+def get_server_timezone():
+    health = fetch_server_health()
+    if health and "timezone" in health:
+        return health["timezone"]
+    return "America/Sao_Paulo"
+
 # 3. Read Operations (Cached, TTL = 300s / 5 minutes)
 @st.cache_data(ttl=300)
 def fetch_guilds(unused_url=None):

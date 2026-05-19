@@ -97,6 +97,15 @@ func runFiberApp() {
 	cron.StartBroadcastWorker(pbRepo, discordService)
 
 
+	// Set global timezone
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err == nil {
+		time.Local = loc
+		log.Printf("🌍 Timezone set to %s", cfg.Timezone)
+	} else {
+		log.Printf("⚠️ Failed to load timezone %s: %v", cfg.Timezone, err)
+	}
+
 	// Initialize Fiber App with dynamic configuration
 	app := fiber.New(fiber.Config{
 		AppName: "Chantry Go Daemon v0.1.0",
@@ -113,16 +122,12 @@ func runFiberApp() {
 
 	// Healthcheck Route
 	app.Get("/api/health", func(c *fiber.Ctx) error {
-		loc, err := time.LoadLocation("America/Sao_Paulo")
 		now := time.Now()
-		if err == nil {
-			now = now.In(loc)
-		}
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"status":    "ok",
 			"service":   "chantry-go-daemon",
 			"timestamp": now.Format(time.RFC3339),
-			"timezone":  "America/Sao_Paulo",
+			"timezone":  cfg.Timezone,
 		})
 	})
 
@@ -164,9 +169,9 @@ func runFiberApp() {
 	api.Get("/test/guilds/:guildId/managers", testHandler.HandleGetManagers)
 
 	// Start dynamic cron background scheduler
-	cron.StartDynamicCron(pbRepo, discordService)
+	cron.StartDynamicCron(pbRepo, discordService, cfg.Timezone)
 	// Start background clock-out check ticker
-	cron.StartClockOutTicker(pbRepo, discordService)
+	cron.StartClockOutTicker(pbRepo, discordService, cfg.Timezone)
 
 	// Get port from environment or fallback to 12000
 	port := os.Getenv("PORT")
